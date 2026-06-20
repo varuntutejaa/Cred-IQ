@@ -122,21 +122,6 @@ export default function Hero() {
               </motion.div>
             </motion.div>
 
-            {/* Stats */}
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, delay: 0.5 }}
-              className="flex items-center gap-6 pt-6 border-t border-white/5"
-            >
-              {[
-                { val: '10K+', label: 'Developers Verified' },
-                { val: '500+', label: 'Recruiters Trust Us' },
-                { val: '98%',  label: 'Accuracy Rate'       },
-              ].map((s) => (
-                <div key={s.label}>
-                  <p className="text-2xl font-black gradient-text">{s.val}</p>
-                  <p className="text-xs text-dark-300 mt-0.5">{s.label}</p>
-                </div>
-              ))}
-            </motion.div>
           </div>
 
           {/* Right: dashboard preview */}
