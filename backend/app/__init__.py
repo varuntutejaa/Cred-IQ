@@ -23,12 +23,14 @@ def create_app():
     from .routes.resume    import resume_bp
     from .routes.verify    import verify_bp
     from .routes.recruiter import recruiter_bp
+    from .routes.insights  import insights_bp
 
     app.register_blueprint(auth_bp,      url_prefix='/api/auth')
     app.register_blueprint(github_bp,    url_prefix='/api/github')
     app.register_blueprint(resume_bp,    url_prefix='/api/resume')
     app.register_blueprint(verify_bp,    url_prefix='/api/verify')
     app.register_blueprint(recruiter_bp, url_prefix='/api/recruiter')
+    app.register_blueprint(insights_bp,  url_prefix='/api/insights')
 
     @app.get('/api/health')
     def health():
