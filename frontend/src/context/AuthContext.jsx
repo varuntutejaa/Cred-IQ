@@ -104,19 +104,16 @@ export function AuthProvider({ children }) {
 
   const updateUser = (updates) => setUser((prev) => ({ ...prev, ...updates }))
 
-  // Demo shortcuts — bypass Firebase, hit backend with a demo token
-  const demoLogin = async () => {
-    const { data } = await axios.post('/api/auth/demo', { role: 'developer' })
+  // Demo — takes a real GitHub username, fetches live data, no Firebase needed
+  const demoLogin = async (githubUsername, role = 'developer') => {
+    const { data } = await axios.post('/api/auth/demo', { github_username: githubUsername, role })
     axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
     setUser(data.user)
     return data.user
   }
 
-  const demoRecruiterLogin = async () => {
-    const { data } = await axios.post('/api/auth/demo', { role: 'recruiter' })
-    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
-    setUser(data.user)
-    return data.user
+  const demoRecruiterLogin = async (githubUsername) => {
+    return demoLogin(githubUsername, 'recruiter')
   }
 
   return (
