@@ -9,24 +9,12 @@ const DEMO_DEVELOPER = {
   email: 'demo@crediq.dev',
   role: 'developer',
   avatar: 'V',
-  githubUsername: 'varun-dev',
+  github_username: 'varun-dev',
   bio: 'Full Stack Developer | Open Source Enthusiast',
   location: 'Bangalore, IN',
-  experience: '3 years',
-  verificationStatus: 'verified',
-  trustScore: 87,
-  githubScore: 92,
-  verifiedSkillsCount: 14,
-  certificatesCount: 6,
-  deploymentsCount: 9,
-  openSourceContributions: 312,
-  resumeTrustScore: 87,
-  topSkills: ['Python', 'React', 'Flask', 'MongoDB', 'TypeScript'],
-  recentActivity: [
-    { msg: 'Python skill verified via 12 repositories', time: '2m ago' },
-    { msg: 'AWS claim needs supporting evidence', time: '1h ago' },
-    { msg: 'GitHub analysis completed — 92/100', time: '3h ago' },
-  ],
+  trust_score: 87,
+  github_score: 92,
+  verified_skills: ['Python', 'React', 'Flask', 'MongoDB', 'TypeScript'],
 }
 
 const DEMO_RECRUITER = {
@@ -38,7 +26,12 @@ const DEMO_RECRUITER = {
   company: 'TechCorp India',
   title: 'Senior Technical Recruiter',
   location: 'Mumbai, IN',
-  verificationStatus: 'verified',
+}
+
+// Attach stored token to every request on startup
+const storedToken = localStorage.getItem('ciq_token')
+if (storedToken) {
+  axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
 }
 
 export function AuthProvider({ children }) {
@@ -46,48 +39,55 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem('pf_user')
-    if (stored) {
-      try { setUser(JSON.parse(stored)) } catch {}
+    const stored = localStorage.getItem('ciq_user')
+    const token  = localStorage.getItem('ciq_token')
+    if (stored && token) {
+      try {
+        setUser(JSON.parse(stored))
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      } catch {}
     }
     setLoading(false)
   }, [])
 
-  const _persist = (userData) => {
+  const _persist = (userData, token) => {
     setUser(userData)
-    localStorage.setItem('pf_user', JSON.stringify(userData))
+    localStorage.setItem('ciq_user', JSON.stringify(userData))
+    if (token) {
+      localStorage.setItem('ciq_token', token)
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    }
   }
 
   const login = async (email, password) => {
     const { data } = await axios.post('/api/auth/login', { email, password })
-    _persist(data.user)
-    localStorage.setItem('pf_token', data.token)
-    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
+    _persist(data.user, data.token)
+    if (data.refresh_token) localStorage.setItem('ciq_refresh', data.refresh_token)
     return data
   }
 
   const register = async (payload) => {
     const { data } = await axios.post('/api/auth/register', payload)
-    _persist(data.user)
-    localStorage.setItem('pf_token', data.token)
-    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
+    _persist(data.user, data.token)
+    if (data.refresh_token) localStorage.setItem('ciq_refresh', data.refresh_token)
     return data
   }
 
-  const demoLogin = () => _persist(DEMO_DEVELOPER)
+  const demoLogin = () => _persist(DEMO_DEVELOPER, null)
 
-  const demoRecruiterLogin = () => _persist(DEMO_RECRUITER)
+  const demoRecruiterLogin = () => _persist(DEMO_RECRUITER, null)
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem('pf_user')
-    localStorage.removeItem('pf_token')
+    localStorage.removeItem('ciq_user')
+    localStorage.removeItem('ciq_token')
+    localStorage.removeItem('ciq_refresh')
     delete axios.defaults.headers.common['Authorization']
   }
 
   const updateUser = (updates) => {
     const updated = { ...user, ...updates }
-    _persist(updated)
+    _persist(updated, localStorage.getItem('ciq_token'))
   }
 
   return (

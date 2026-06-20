@@ -1,26 +1,21 @@
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
 
-limiter = Limiter(key_func=get_remote_address)
-
 def create_app():
     app = Flask(__name__)
 
-    app.config['SECRET_KEY']                  = os.getenv('SECRET_KEY', 'dev-secret')
-    app.config['JWT_SECRET_KEY']              = os.getenv('JWT_SECRET_KEY', 'dev-jwt-secret')
+    app.config['SECRET_KEY']                  = os.getenv('SECRET_KEY', 'dev-secret-change-me')
+    app.config['JWT_SECRET_KEY']              = os.getenv('JWT_SECRET_KEY', 'dev-jwt-change-me')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES']    = False   # set a timedelta in production
     app.config['MONGO_URI']                   = os.getenv('MONGO_URI', 'mongodb://localhost:27017/crediq')
-    app.config['REDIS_URL']                   = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 
-    CORS(app, origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173')])
+    CORS(app, origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173')], supports_credentials=True)
     JWTManager(app)
-    limiter.init_app(app)
 
     from .routes.auth      import auth_bp
     from .routes.github    import github_bp
@@ -36,6 +31,12 @@ def create_app():
 
     @app.get('/api/health')
     def health():
-        return {'status': 'ok', 'service': 'CredIQ API'}
+        from .db import get_db
+        try:
+            get_db().command('ping')
+            db_status = 'connected'
+        except Exception:
+            db_status = 'disconnected'
+        return {'status': 'ok', 'service': 'CredIQ API', 'db': db_status}
 
     return app
