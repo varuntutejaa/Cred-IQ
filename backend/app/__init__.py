@@ -8,14 +8,15 @@ load_dotenv()
 
 def create_app():
     app = Flask(__name__)
-
-    app.config['SECRET_KEY']                  = os.getenv('SECRET_KEY', 'dev-secret-change-me')
-    app.config['JWT_SECRET_KEY']              = os.getenv('JWT_SECRET_KEY', 'dev-jwt-change-me')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES']    = False   # set a timedelta in production
-    app.config['MONGO_URI']                   = os.getenv('MONGO_URI', 'mongodb://localhost:27017/crediq')
+    app.config['SECRET_KEY']               = os.getenv('SECRET_KEY', 'dev-secret-change-me')
+    app.config['JWT_SECRET_KEY']           = os.getenv('JWT_SECRET_KEY', 'dev-jwt-change-me')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False
 
     CORS(app, origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173')], supports_credentials=True)
-    JWTManager(app)
+    JWTManager(app)   # still used for demo tokens only
+
+    from .firebase_admin_init import init_firebase
+    init_firebase()
 
     from .routes.auth      import auth_bp
     from .routes.github    import github_bp

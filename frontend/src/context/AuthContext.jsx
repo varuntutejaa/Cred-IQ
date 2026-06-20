@@ -1,37 +1,36 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+} from 'firebase/auth'
 import axios from 'axios'
+import { auth, googleProvider, githubProvider } from '../firebase'
 
 const AuthContext = createContext(null)
 
-const DEMO_DEVELOPER = {
-  id: 'demo-dev-001',
-  name: 'Varun Tuteja',
-  email: 'demo@crediq.dev',
-  role: 'developer',
-  avatar: 'V',
-  github_username: 'varun-dev',
-  bio: 'Full Stack Developer | Open Source Enthusiast',
-  location: 'Bangalore, IN',
-  trust_score: 87,
-  github_score: 92,
-  verified_skills: ['Python', 'React', 'Flask', 'MongoDB', 'TypeScript'],
+// Sync Firebase user to our MongoDB and return the enriched profile
+async function syncToBackend(firebaseUser, extra = {}) {
+  const token = await firebaseUser.getIdToken()
+  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+  const { data } = await axios.post('/api/auth/sync', {
+    uid:         firebaseUser.uid,
+    email:       firebaseUser.email,
+    name:        firebaseUser.displayName || extra.name || firebaseUser.email.split('@')[0],
+    avatar:      firebaseUser.photoURL || null,
+    ...extra,
+  })
+  return { profile: data.user, token }
 }
 
-const DEMO_RECRUITER = {
-  id: 'demo-rec-001',
-  name: 'Anjali Mehta',
-  email: 'recruiter@techcorp.com',
-  role: 'recruiter',
-  avatar: 'A',
-  company: 'TechCorp India',
-  title: 'Senior Technical Recruiter',
-  location: 'Mumbai, IN',
-}
-
-// Attach stored token to every request on startup
-const storedToken = localStorage.getItem('ciq_token')
-if (storedToken) {
-  axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
+// Refresh token before it expires (Firebase tokens last 1h)
+async function refreshToken(firebaseUser) {
+  const token = await firebaseUser.getIdToken(true)
+  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+  return token
 }
 
 export function AuthProvider({ children }) {
@@ -39,59 +38,94 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem('ciq_user')
-    const token  = localStorage.getItem('ciq_token')
-    if (stored && token) {
-      try {
-        setUser(JSON.parse(stored))
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-      } catch {}
-    }
-    setLoading(false)
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const { profile } = await syncToBackend(firebaseUser)
+          setUser(profile)
+          // refresh token every 55 minutes
+          setInterval(() => refreshToken(firebaseUser), 55 * 60 * 1000)
+        } catch {
+          setUser(null)
+        }
+      } else {
+        setUser(null)
+        delete axios.defaults.headers.common['Authorization']
+      }
+      setLoading(false)
+    })
+    return unsub
   }, [])
 
-  const _persist = (userData, token) => {
-    setUser(userData)
-    localStorage.setItem('ciq_user', JSON.stringify(userData))
-    if (token) {
-      localStorage.setItem('ciq_token', token)
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-    }
+  // Email + password register
+  const register = async ({ name, email, password, role }) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, password)
+    await updateProfile(cred.user, { displayName: name })
+    const { profile } = await syncToBackend(cred.user, { name, role })
+    setUser(profile)
+    return profile
   }
 
+  // Email + password login
   const login = async (email, password) => {
-    const { data } = await axios.post('/api/auth/login', { email, password })
-    _persist(data.user, data.token)
-    if (data.refresh_token) localStorage.setItem('ciq_refresh', data.refresh_token)
-    return data
+    const cred = await signInWithEmailAndPassword(auth, email, password)
+    const { profile } = await syncToBackend(cred.user)
+    setUser(profile)
+    return profile
   }
 
-  const register = async (payload) => {
-    const { data } = await axios.post('/api/auth/register', payload)
-    _persist(data.user, data.token)
-    if (data.refresh_token) localStorage.setItem('ciq_refresh', data.refresh_token)
-    return data
+  // Google OAuth
+  const loginWithGoogle = async (role = 'developer') => {
+    const cred = await signInWithPopup(auth, googleProvider)
+    const { profile } = await syncToBackend(cred.user, { role })
+    setUser(profile)
+    return profile
   }
 
-  const demoLogin = () => _persist(DEMO_DEVELOPER, null)
+  // GitHub OAuth
+  const loginWithGitHub = async (role = 'developer') => {
+    const cred = await signInWithPopup(auth, githubProvider)
+    // GitHub access token for our GitHub analysis service
+    const githubToken = cred._tokenResponse?.oauthAccessToken
+    const { profile } = await syncToBackend(cred.user, {
+      role,
+      github_username:       cred.user.reloadUserInfo?.screenName || null,
+      github_access_token:   githubToken || null,
+    })
+    setUser(profile)
+    return profile
+  }
 
-  const demoRecruiterLogin = () => _persist(DEMO_RECRUITER, null)
-
-  const logout = () => {
+  const logout = async () => {
+    await signOut(auth)
     setUser(null)
-    localStorage.removeItem('ciq_user')
-    localStorage.removeItem('ciq_token')
-    localStorage.removeItem('ciq_refresh')
     delete axios.defaults.headers.common['Authorization']
   }
 
-  const updateUser = (updates) => {
-    const updated = { ...user, ...updates }
-    _persist(updated, localStorage.getItem('ciq_token'))
+  const updateUser = (updates) => setUser((prev) => ({ ...prev, ...updates }))
+
+  // Demo shortcuts — bypass Firebase, hit backend with a demo token
+  const demoLogin = async () => {
+    const { data } = await axios.post('/api/auth/demo', { role: 'developer' })
+    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
+    setUser(data.user)
+    return data.user
+  }
+
+  const demoRecruiterLogin = async () => {
+    const { data } = await axios.post('/api/auth/demo', { role: 'recruiter' })
+    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
+    setUser(data.user)
+    return data.user
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser, demoLogin, demoRecruiterLogin }}>
+    <AuthContext.Provider value={{
+      user, loading,
+      login, register, loginWithGoogle, loginWithGitHub,
+      logout, updateUser,
+      demoLogin, demoRecruiterLogin,
+    }}>
       {children}
     </AuthContext.Provider>
   )
