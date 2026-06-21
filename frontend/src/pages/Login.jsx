@@ -1,31 +1,28 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Shield, Mail, Lock, Eye, EyeOff, ArrowRight, Code2, Briefcase, Github, X, Sparkles } from 'lucide-react'
+import { Shield, Mail, Lock, Eye, EyeOff, ArrowRight, Github, X, Sparkles, Building2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { FIREBASE_CONFIGURED } from '../firebase'
 import toast from 'react-hot-toast'
 
 export default function Login() {
-  const [role, setRole]             = useState('developer')
   const [form, setForm]             = useState({ email: '', password: '' })
   const [showPwd, setShowPwd]       = useState(false)
   const [loading, setLoading]       = useState(false)
   const [showDemo, setShowDemo]     = useState(false)
   const [githubInput, setGithubInput] = useState('')
 
-  const { login, loginWithGoogle, loginWithGitHub, demoLogin, demoRecruiterLogin } = useAuth()
+  const { login, loginWithGoogle, loginWithGitHub, demoLogin } = useAuth()
   const navigate = useNavigate()
-
-  const destination = (user) => user?.role === 'recruiter' ? '/recruiter' : '/dashboard'
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     try {
-      const user = await login(form.email, form.password)
+      await login(form.email, form.password)
       toast.success('Welcome back!')
-      navigate(destination(user))
+      navigate('/dashboard')
     } catch (err) {
       toast.error(err?.response?.data?.message || err?.message || 'Invalid credentials')
     } finally { setLoading(false) }
@@ -35,9 +32,9 @@ export default function Login() {
     if (!FIREBASE_CONFIGURED) { toast.error('Add VITE_FIREBASE_* keys to frontend/.env to enable Google login'); return }
     setLoading(true)
     try {
-      const user = await loginWithGoogle(role)
+      await loginWithGoogle('developer')
       toast.success('Signed in with Google!')
-      navigate(destination(user))
+      navigate('/dashboard')
     } catch (err) {
       if (err?.code !== 'auth/popup-closed-by-user') toast.error(err?.message || 'Google sign-in failed')
     } finally { setLoading(false) }
@@ -47,9 +44,9 @@ export default function Login() {
     if (!FIREBASE_CONFIGURED) { toast.error('Add VITE_FIREBASE_* keys to frontend/.env to enable GitHub login'); return }
     setLoading(true)
     try {
-      const user = await loginWithGitHub(role)
+      await loginWithGitHub('developer')
       toast.success('Signed in with GitHub!')
-      navigate(destination(user))
+      navigate('/dashboard')
     } catch (err) {
       if (err?.code !== 'auth/popup-closed-by-user') toast.error(err?.message || 'GitHub sign-in failed')
     } finally { setLoading(false) }
@@ -63,10 +60,9 @@ export default function Login() {
 
     setLoading(true)
     try {
-      const fn   = role === 'recruiter' ? demoRecruiterLogin : demoLogin
-      const user = await fn(username, role)
+      const user = await demoLogin(username, 'developer')
       toast.success(`Loaded ${user.name}'s real GitHub data!`)
-      navigate(destination(user))
+      navigate('/dashboard')
     } catch (err) {
       toast.error(err?.response?.data?.message || 'GitHub user not found')
     } finally { setLoading(false) }
@@ -92,23 +88,7 @@ export default function Login() {
 
         <div className="glass-card gradient-border">
           <h1 className="text-2xl font-bold text-center mb-1">Welcome back</h1>
-          <p className="text-sm text-dark-300 text-center mb-5">Sign in to your CredIQ account</p>
-
-          {/* Role toggle */}
-          <div className="flex gap-1.5 p-1 glass rounded-xl mb-5">
-            {[
-              { key: 'developer', icon: Code2,     label: 'Developer' },
-              { key: 'recruiter', icon: Briefcase, label: 'Recruiter' },
-            ].map(({ key, icon: Icon, label }) => (
-              <button key={key} onClick={() => { setRole(key); setShowDemo(false) }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  role === key ? 'bg-brand-500 text-white shadow-glow-sm' : 'text-dark-300 hover:text-white'
-                }`}
-              >
-                <Icon size={14} /> {label}
-              </button>
-            ))}
-          </div>
+          <p className="text-sm text-dark-300 text-center mb-5">Sign in to your developer account</p>
 
           {/* OAuth buttons */}
           <div className="space-y-2 mb-4">
@@ -221,10 +201,17 @@ export default function Login() {
             </AnimatePresence>
           </div>
 
-          <p className="text-sm text-dark-300 text-center mt-4">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-brand-400 hover:text-brand-300 font-medium transition-colors">Create one free</Link>
-          </p>
+          <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+            <p className="text-sm text-dark-300">
+              No account?{' '}
+              <Link to="/register" className="text-brand-400 hover:text-brand-300 font-medium transition-colors">Sign up free</Link>
+            </p>
+            <Link to="/recruiter-login"
+              className="flex items-center gap-1.5 text-xs text-dark-500 hover:text-purple-300 transition-colors"
+            >
+              <Building2 size={12} /> Recruiter SSO
+            </Link>
+          </div>
         </div>
       </motion.div>
     </div>

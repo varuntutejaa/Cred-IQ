@@ -4,6 +4,7 @@ import { RecruiterProvider } from './context/RecruiterContext'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import RecruiterLogin from './pages/RecruiterLogin'
 import Dashboard from './pages/Dashboard'
 import RecruiterDashboard from './pages/RecruiterDashboard'
 
@@ -33,8 +34,9 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/"           element={<Landing />} />
-        <Route path="/login"      element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/register"   element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/login"           element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/register"        element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/recruiter-login" element={<PublicRoute><RecruiterLogin /></PublicRoute>} />
         <Route path="/dashboard/*"element={<PrivateRoute requireRole="developer"><Dashboard /></PrivateRoute>} />
         <Route path="/recruiter/*"element={<PrivateRoute requireRole="recruiter"><RecruiterProvider><RecruiterDashboard /></RecruiterProvider></PrivateRoute>} />
         <Route path="*"           element={<Navigate to="/" replace />} />

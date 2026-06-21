@@ -138,11 +138,21 @@ export function AuthProvider({ children }) {
     return demoLogin(githubUsername, 'recruiter')
   }
 
+  // IDP login for recruiters
+  const idpLogin = async (email, password) => {
+    const { data } = await axios.post('/api/idp/login', { email, password })
+    axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
+    setUser(data.user)
+    localStorage.setItem('ciq_demo_user',  JSON.stringify(data.user))
+    localStorage.setItem('ciq_demo_token', data.token)
+    return data.user
+  }
+
   return (
     <AuthContext.Provider value={{
       user, loading,
       login, register, loginWithGoogle, loginWithGitHub,
-      logout, updateUser,
+      logout, updateUser, idpLogin,
       demoLogin, demoRecruiterLogin,
     }}>
       {children}

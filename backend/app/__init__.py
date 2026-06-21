@@ -25,6 +25,7 @@ def create_app():
     from .routes.recruiter  import recruiter_bp
     from .routes.insights   import insights_bp
     from .routes.complexity import complexity_bp
+    from .routes.idp        import idp_bp
 
     app.register_blueprint(auth_bp,       url_prefix='/api/auth')
     app.register_blueprint(github_bp,     url_prefix='/api/github')
@@ -33,6 +34,7 @@ def create_app():
     app.register_blueprint(recruiter_bp,  url_prefix='/api/recruiter')
     app.register_blueprint(insights_bp,   url_prefix='/api/insights')
     app.register_blueprint(complexity_bp, url_prefix='/api/complexity')
+    app.register_blueprint(idp_bp,        url_prefix='/api/idp')
 
     @app.get('/api/health')
     def health():
