@@ -32,7 +32,7 @@ def _generate(prompt: str) -> str:
                 model=model,
                 messages=[{'role': 'user', 'content': prompt}],
                 temperature=0.3,
-                max_tokens=1024,
+                max_tokens=2048,
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
@@ -92,7 +92,7 @@ def _cache_set(username: str, kind: str, payload: dict):
 def generate_career_insights(github_data: dict, trust_score: dict, builder_score: dict) -> dict:
     username = github_data.get('username', '')
 
-    cached = _cache_get(username, 'career')
+    cached = _cache_get(username, 'career_v2')
     if cached:
         return cached
 
@@ -102,34 +102,39 @@ def generate_career_insights(github_data: dict, trust_score: dict, builder_score
         for r in github_data.get('top_repos', [])[:5]
     )
 
-    prompt = f"""You are a senior engineering hiring consultant. Analyse this developer's GitHub profile and return career insights.
+    prompt = f"""You are a senior engineering career advisor and technical mentor. Analyse this developer's GitHub profile deeply and return rich, personalised AI insights.
 
 DEVELOPER PROFILE:
-- GitHub: {username}
+- GitHub: @{username}
 - Account age: {github_data.get('account_age_days', 0) // 365}y {(github_data.get('account_age_days', 0) % 365) // 30}m
 - Public repos: {github_data.get('public_repos', 0)}
-- Total stars: {github_data.get('total_stars', 0)}
+- Total stars earned: {github_data.get('total_stars', 0)}
 - Followers: {github_data.get('followers', 0)}
 - Commits (last 12 months): {github_data.get('commit_count', 0)}
 - Languages: {languages or 'unknown'}
-- Trust Score: {trust_score.get('total', 'N/A')}/100
-- Builder Score: {builder_score.get('total', 'N/A')}/100
+- CredIQ Trust Score: {trust_score.get('total', 'N/A')}/100
+- CredIQ Builder Score: {builder_score.get('total', 'N/A')}/100
 
 TOP REPOSITORIES:
 {top_repos or '  (none)'}
 
-Return ONLY a raw JSON object, no markdown, no code fences, no extra text:
+Return ONLY a raw JSON object — no markdown, no code fences, no extra text outside the braces:
 {{
-  "summary": "2-3 sentence honest assessment of this developer",
-  "strengths": ["strength 1", "strength 2", "strength 3"],
-  "gaps": ["gap 1", "gap 2"],
-  "recommended_roles": ["role 1", "role 2", "role 3"],
-  "salary_range": "₹X-Y LPA (India) / $X-$Yk (US)",
-  "next_steps": ["step 1", "step 2", "step 3"],
+  "summary": "3-sentence honest assessment of this developer's profile, skill level, and overall positioning in the job market",
+  "strengths": ["specific strength with evidence from the profile", "strength 2", "strength 3", "strength 4"],
+  "gaps": ["specific skill gap or weakness 1", "gap 2", "gap 3"],
+  "recommended_roles": ["Specific job title 1", "job title 2", "job title 3"],
+  "learning_path": ["Specific technology or skill to learn next with a brief why", "learning item 2", "learning item 3", "learning item 4"],
+  "tech_stack_advice": "2-3 sentences on which specific technologies to adopt, which to drop, and what emerging tools fit their current stack trajectory",
+  "profile_improvements": ["Concrete GitHub profile or repo improvement 1", "improvement 2", "improvement 3"],
+  "open_source_advice": "2 sentences on how this developer should approach open source contributions given their current skill level and stack",
+  "next_steps": ["Concrete, actionable career step 1", "next step 2", "next step 3"],
   "market_fit": "high",
-  "standout_project": "repo name — one sentence on why it stands out"
+  "collaboration_potential": "high",
+  "standout_project": "repo name — one sentence on why it stands out above the rest"
 }}
-market_fit must be exactly one of: high, medium, low"""
+market_fit must be exactly one of: high, medium, low
+collaboration_potential must be exactly one of: high, medium, low"""
 
     raw = _generate(prompt)
     try:
@@ -137,7 +142,7 @@ market_fit must be exactly one of: high, medium, low"""
     except Exception as e:
         raise ValueError(f'AI returned unparseable JSON: {e}\n\nRaw:\n{raw[:500]}')
 
-    _cache_set(username, 'career', result)
+    _cache_set(username, 'career_v2', result)
     return result
 
 
