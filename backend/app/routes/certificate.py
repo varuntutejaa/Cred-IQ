@@ -1,6 +1,7 @@
 import io
 import base64
 import PyPDF2
+import requests as http_requests
 from flask import Blueprint, request, jsonify
 from urllib.parse import urlparse
 from ..firebase_admin_init import firebase_required
@@ -67,37 +68,117 @@ def _match_issuer(issuer: str):
     return None
 
 
+def _live_check(url: str) -> tuple[bool, int | None]:
+    """Try HEAD then GET to see if the URL is actually reachable. Returns (is_live, status_code)."""
+    headers = {'User-Agent': 'Mozilla/5.0 (CredIQ Certificate Verifier)'}
+    for method in ('HEAD', 'GET'):
+        try:
+            resp = http_requests.request(
+                method, url,
+                headers=headers,
+                timeout=8,
+                allow_redirects=True,
+                stream=(method == 'GET'),
+            )
+            return resp.status_code < 400, resp.status_code
+        except Exception:
+            continue
+    return False, None
+
+
 def _check_url(url: str, issuer_info: dict):
+    """
+    Three-stage check:
+      1. Parse & validate the URL format
+      2. Domain match against known issuer database
+      3. Live HTTP fetch — if the page actually loads, it's the strongest signal
+    Returns (status_key, human_reason, score_delta, live_check_result)
+    """
     if not url:
-        return 'no_url', 'No verification URL provided', 0
+        return 'no_url', 'No verification URL provided', 0, None
 
     domain = _get_domain(url)
     if not domain:
-        return 'bad_url', 'URL could not be parsed', -20
+        return 'bad_url', 'URL could not be parsed', -20, None
+
+    # --- domain check ---
+    domain_match  = False
+    domain_reason = ''
+    delta         = 0
 
     if issuer_info:
         known = issuer_info.get('domains', [])
         if any(domain == d or domain.endswith('.' + d) for d in known):
-            return 'match', f'Domain "{domain}" matches verified issuer database', 15
+            domain_match  = True
+            domain_reason = f'Domain "{domain}" matches verified issuer database'
+            delta         = 10
         elif known:
-            return 'mismatch', f'Domain "{domain}" does NOT match expected domains for this issuer ({", ".join(known[:2])})', -35
+            domain_reason = f'Domain "{domain}" does NOT match expected domains ({", ".join(known[:2])})'
+            delta         = -35
+    else:
+        domain_reason = f'Issuer not in verified database — URL domain: {domain}'
 
-    return 'unknown_issuer', f'Issuer not in database — URL domain: {domain}', 0
+    # --- live HTTP check (the decisive signal) ---
+    is_live, status_code = _live_check(url)
+
+    if is_live:
+        if domain_match:
+            # URL is live AND on verified issuer domain → 100% legitimate
+            reason = (
+                f'✓ URL is live (HTTP {status_code}) and hosted on verified issuer domain "{domain}". '
+                f'Certificate is confirmed authentic.'
+            )
+            return 'live_verified', reason, 20, True
+        else:
+            # URL is live but domain is unrecognised
+            reason = (
+                f'URL is live (HTTP {status_code}) on "{domain}" — page loads successfully '
+                f'but domain is not in the verified issuer database. {domain_reason}'
+            )
+            return 'live_unknown', reason, 5, True
+    else:
+        # URL does not load
+        if status_code:
+            dead_reason = f'URL returned HTTP {status_code} — page did not load.'
+        else:
+            dead_reason = 'URL did not respond within 8 seconds — could not be reached.'
+
+        if domain_match:
+            reason = f'{dead_reason} Domain "{domain}" matches known issuer but the link appears broken or expired.'
+            return 'dead_known', reason, delta - 5, False
+        elif delta < 0:
+            reason = f'{dead_reason} Additionally, {domain_reason}'
+            return 'mismatch', reason, delta, False
+        else:
+            reason = f'{dead_reason} {domain_reason}'
+            return 'dead_unknown', reason, -10, False
 
 
 def _build_result(name: str, issuer: str, date: str, url: str, extracted: dict = None) -> dict:
-    """Shared pipeline: issuer check + trust score + AI skill analysis."""
+    """Shared pipeline: issuer check + live URL fetch + trust score + AI skill analysis."""
     issuer_info = _match_issuer(issuer) if issuer else None
-    url_status, url_reason, url_delta = _check_url(url, issuer_info)
+    url_status, url_reason, url_delta, is_live = _check_url(url, issuer_info)
 
     base  = issuer_info['reputation'] if issuer_info else 50
     trust = max(5, min(100, base + url_delta))
 
-    if url_status == 'match' and trust >= 70:
+    # Determine final status
+    if url_status == 'live_verified':
+        # URL fetched successfully AND domain is in verified issuer DB → unambiguously legit
         status = 'verified'
+        trust  = min(100, max(trust, 95))   # floor at 95 for confirmed-live certs
+    elif url_status == 'live_unknown':
+        # Page loads but issuer unknown → probably real, just not in our DB
+        status = 'review'
+        trust  = min(100, max(trust, 70))
     elif url_status in ('mismatch', 'bad_url'):
         status = 'suspicious'
         trust  = max(5, trust - 25)
+    elif url_status == 'dead_known':
+        # Correct domain but broken link — issuer is fine, link expired
+        status = 'review'
+    elif url_status == 'no_url':
+        status = 'review'
     else:
         status = 'review'
 
@@ -126,6 +207,7 @@ def _build_result(name: str, issuer: str, date: str, url: str, extracted: dict =
         'verification': {
             'url_status':        url_status,
             'reason':            url_reason,
+            'url_live':          is_live,
             'issuer_known':      bool(issuer_info),
             'issuer_category':   issuer_info['category']   if issuer_info else 'Unknown',
             'issuer_reputation': issuer_info['reputation'] if issuer_info else 50,

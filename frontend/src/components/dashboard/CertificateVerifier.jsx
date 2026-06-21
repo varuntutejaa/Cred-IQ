@@ -5,7 +5,7 @@ import {
   Award, CheckCircle, AlertTriangle, XCircle, Zap, Plus, X,
   ExternalLink, Calendar, Building2, Brain, BookOpen, Briefcase,
   Target, TrendingUp, Sparkles, Trash2, ChevronDown, ChevronUp,
-  Shield, Upload, FileText, Image, UploadCloud,
+  Shield, UploadCloud, FileText, Wifi, WifiOff,
 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -271,6 +271,16 @@ function CertCard({ cert, onDelete }) {
                 Known Issuer
               </span>
             )}
+            {cert.verification?.url_live === true && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold flex items-center gap-1">
+                <Wifi size={9} /> URL Live
+              </span>
+            )}
+            {cert.verification?.url_live === false && cert.url && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 font-semibold flex items-center gap-1">
+                <WifiOff size={9} /> URL Dead
+              </span>
+            )}
             {cert.extracted && (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 font-semibold">
                 AI Extracted
@@ -328,6 +338,16 @@ function CertCard({ cert, onDelete }) {
                   <Shield size={11} /> Verification Result
                 </p>
                 <p className="text-xs text-dark-200">{cert.verification?.reason}</p>
+                {cert.verification?.url_live === true && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                    <Wifi size={11} /> URL is live — page loaded successfully
+                  </div>
+                )}
+                {cert.verification?.url_live === false && cert.url && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-red-400 font-medium">
+                    <WifiOff size={11} /> URL not reachable — link may be expired
+                  </div>
+                )}
                 {cert.url && (
                   <a href={cert.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                     className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 mt-1.5 transition-colors"
