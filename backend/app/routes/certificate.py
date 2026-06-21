@@ -42,8 +42,21 @@ KNOWN_ISSUERS = {
     'tableau':             {'domains': ['tableau.com'],                                                     'reputation': 80, 'category': 'Data Visualization'},
     'deeplearning.ai':     {'domains': ['deeplearning.ai', 'coursera.org'],                                 'reputation': 88, 'category': 'Machine Learning'},
     'deeplearning':        {'domains': ['deeplearning.ai', 'coursera.org'],                                 'reputation': 88, 'category': 'Machine Learning'},
-    'credly':              {'domains': ['credly.com', 'badgr.com'],                                        'reputation': 80, 'category': 'Certifications'},
+    'credly':              {'domains': ['credly.com', 'badgr.com'],                                        'reputation': 95, 'category': 'Certifications'},
     'cloudflare':          {'domains': ['cloudflare.com', 'cloudflare.training'],                          'reputation': 84, 'category': 'Cloud / Security'},
+    'nptel':               {'domains': ['nptel.ac.in', 'swayam.gov.in', 'archive.nptel.ac.in'],            'reputation': 88, 'category': 'Academic'},
+    'swayam':              {'domains': ['swayam.gov.in', 'nptel.ac.in'],                                   'reputation': 88, 'category': 'Academic'},
+    'iit':                 {'domains': ['nptel.ac.in', 'swayam.gov.in'],                                   'reputation': 90, 'category': 'Academic'},
+}
+
+# Badge/cert hosting platforms — if URL is live on any of these, it's verified regardless of issuer name
+TRUSTED_PLATFORMS = {
+    'credly.com':   'Credly (global badge platform used by AWS, Microsoft, Cisco, IBM and 2000+ issuers)',
+    'badgr.com':    'Badgr (open badge platform)',
+    'credential.net': 'Accredible (trusted credential platform)',
+    'nptel.ac.in':  'NPTEL (IIT/IISc national online education programme)',
+    'swayam.gov.in': 'SWAYAM (Government of India MOOC platform)',
+    'archive.nptel.ac.in': 'NPTEL Certificate Archive',
 }
 
 
@@ -70,17 +83,26 @@ def _match_issuer(issuer: str):
 
 def _live_check(url: str) -> tuple[bool, int | None]:
     """Try HEAD then GET to see if the URL is actually reachable. Returns (is_live, status_code)."""
-    headers = {'User-Agent': 'Mozilla/5.0 (CredIQ Certificate Verifier)'}
+    headers = {
+        'User-Agent': (
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/124.0.0.0 Safari/537.36'
+        ),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    }
     for method in ('HEAD', 'GET'):
         try:
             resp = http_requests.request(
                 method, url,
                 headers=headers,
-                timeout=8,
+                timeout=12,
                 allow_redirects=True,
                 stream=(method == 'GET'),
             )
-            return resp.status_code < 400, resp.status_code
+            # 200-399 = live; 405 = method not allowed but server responded (also live)
+            code = resp.status_code
+            return code < 400 or code == 405, code
         except Exception:
             continue
     return False, None
@@ -101,7 +123,32 @@ def _check_url(url: str, issuer_info: dict):
     if not domain:
         return 'bad_url', 'URL could not be parsed', -20, None
 
-    # --- domain check ---
+    # --- platform shortcut: badge hosting platforms are always trusted if live ---
+    platform_name = None
+    for plat_domain, plat_label in TRUSTED_PLATFORMS.items():
+        if domain == plat_domain or domain.endswith('.' + plat_domain):
+            platform_name = plat_label
+            break
+
+    # --- live HTTP check (the decisive signal) ---
+    is_live, status_code = _live_check(url)
+
+    if platform_name:
+        if is_live:
+            reason = (
+                f'✓ URL is live (HTTP {status_code}) on {platform_name}. '
+                f'This is a trusted certificate hosting platform — certificate is confirmed authentic.'
+            )
+            return 'live_verified', reason, 20, True
+        else:
+            dead = f'HTTP {status_code}' if status_code else 'no response within 12s'
+            reason = (
+                f'Domain is {platform_name} (trusted platform) but URL did not load ({dead}). '
+                f'The link may be expired or the certificate was removed.'
+            )
+            return 'dead_known', reason, 0, False
+
+    # --- domain check against issuer DB ---
     domain_match  = False
     domain_reason = ''
     delta         = 0
@@ -118,19 +165,14 @@ def _check_url(url: str, issuer_info: dict):
     else:
         domain_reason = f'Issuer not in verified database — URL domain: {domain}'
 
-    # --- live HTTP check (the decisive signal) ---
-    is_live, status_code = _live_check(url)
-
     if is_live:
         if domain_match:
-            # URL is live AND on verified issuer domain → 100% legitimate
             reason = (
                 f'✓ URL is live (HTTP {status_code}) and hosted on verified issuer domain "{domain}". '
                 f'Certificate is confirmed authentic.'
             )
             return 'live_verified', reason, 20, True
         else:
-            # URL is live but domain is unrecognised
             reason = (
                 f'URL is live (HTTP {status_code}) on "{domain}" — page loads successfully '
                 f'but domain is not in the verified issuer database. {domain_reason}'
