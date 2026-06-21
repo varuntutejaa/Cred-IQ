@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Filter, CheckCircle, X, ChevronDown, BookMarked, Eye, Loader2, Plus, Users } from 'lucide-react'
+import { Search, Filter, CheckCircle, X, ChevronDown, BookMarked, Eye, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import axios from 'axios'
@@ -18,7 +18,7 @@ const VERDICT_STYLE = {
 
 export default function CandidateSearch() {
   const navigate = useNavigate()
-  const { candidates, shortlists, addCandidate, addToShortlist, createShortlist } = useRecruiter()
+  const { candidates, shortlists, addToShortlist, createShortlist } = useRecruiter()
 
   const [query,        setQuery]       = useState('')
   const [minTrust,     setMinTrust]    = useState(0)
@@ -26,9 +26,7 @@ export default function CandidateSearch() {
   const [skillFilter,  setSkillFilter] = useState([])
   const [showFilters,  setShowFilters] = useState(false)
 
-  // Quick-add new GitHub username
   const [addInput, setAddInput] = useState('')
-  const [adding,   setAdding]   = useState(false)
 
   const toggleSkill = (s) => setSkillFilter((prev) =>
     prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
@@ -42,46 +40,6 @@ export default function CandidateSearch() {
       addToShortlist(shortlists[0].id, c.username)
     }
     toast.success(`Added @${c.username} to shortlist`)
-  }
-
-  const handleAddNew = async () => {
-    const handle = addInput.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '').replace('@', '')
-    if (!handle) return
-    setAdding(true)
-    try {
-      const [profRes, verRes] = await Promise.all([
-        axios.get(`/api/github/analyze/${handle}`),
-        axios.get(`/api/recruiter/quick-verify/${handle}`),
-      ])
-      const p = profRes.data
-      const v = verRes.data
-      const trust   = v.trust_score?.total   ?? 0
-      const builder = v.builder_score?.total ?? 0
-      const avg     = (trust + builder) / 2
-      const verdict = avg >= 80 ? 'Top Candidate' : avg >= 65 ? 'Highly Recommended' : avg >= 50 ? 'Recommended' : 'Needs Review'
-      addCandidate({
-        username:      handle,
-        name:          p.name || handle,
-        avatar:        p.avatar,
-        bio:           p.bio || '',
-        trust_score:   trust,
-        builder_score: builder,
-        languages:     p.languages || [],
-        top_repos:     p.top_repos  || [],
-        public_repos:  p.public_repos  || 0,
-        total_stars:   p.total_stars   || 0,
-        followers:     p.followers     || 0,
-        commit_count:  p.commit_count  || 0,
-        vibe_risk:     v.vibe_analysis?.risk_score || 0,
-        verdict,
-      })
-      toast.success(`@${handle} added`)
-      setAddInput('')
-    } catch {
-      toast.error(`Could not find @${handle}`)
-    } finally {
-      setAdding(false)
-    }
   }
 
   const filtered = candidates.filter((c) => {
@@ -109,27 +67,35 @@ export default function CandidateSearch() {
         </span>
       </div>
 
-      {/* Add new GitHub user */}
+      {/* Direct profile search */}
       <div className="glass-card gradient-border">
-        <p className="text-xs font-semibold text-dark-300 mb-2">Add a new GitHub profile</p>
+        <p className="text-xs font-semibold text-dark-300 mb-2">Search any GitHub profile</p>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-500 text-sm font-mono">@</span>
-            <input type="text" placeholder="github-username"
+            <input type="text" placeholder="github-username — press Enter to view full profile"
               value={addInput} onChange={(e) => setAddInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddNew()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const h = addInput.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '').replace('@', '')
+                  if (h) navigate(`/recruiter/candidate/${h}`)
+                }
+              }}
               className="w-full bg-white/5 border border-white/10 rounded-xl pl-8 pr-4 py-2.5 text-sm text-white placeholder-dark-500 focus:outline-none focus:border-brand-500/60 transition-all"
             />
           </div>
-          <button onClick={handleAddNew} disabled={adding || !addInput.trim()}
+          <button
+            onClick={() => {
+              const h = addInput.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '').replace('@', '')
+              if (h) navigate(`/recruiter/candidate/${h}`)
+            }}
+            disabled={!addInput.trim()}
             className="flex items-center gap-2 bg-gradient-to-r from-brand-500 to-purple-600 hover:from-brand-400 hover:to-purple-500 text-white font-semibold rounded-xl px-4 py-2.5 text-sm shadow-glow disabled:opacity-50 transition-all"
           >
-            {adding
-              ? <Loader2 size={14} className="animate-spin" />
-              : <><Plus size={14} /> Add</>
-            }
+            <Eye size={14} /> Review
           </button>
         </div>
+        <p className="text-[10px] text-dark-500 mt-2">Opens the full developer portal — GitHub analysis, AI insights, score breakdown, vibe code check</p>
       </div>
 
       {/* Search + filter bar */}
