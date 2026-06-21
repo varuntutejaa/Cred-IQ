@@ -89,6 +89,85 @@ def _cache_set(username: str, kind: str, payload: dict):
 
 # ─── Public API ────────────────────────────────────────────────────────────────
 
+def generate_trust_score(github_data: dict, top_repos_raw=None) -> dict:
+    """AI-powered trust score — Groq evaluates all signals holistically."""
+    username = github_data.get('username', '')
+
+    cached = _cache_get(username, 'trust_v1')
+    if cached:
+        return cached
+
+    langs = ', '.join(f"{l['name']} ({l['pct']}%)" for l in github_data.get('languages', [])[:8])
+    repos_text = '\n'.join(
+        f"  - {r['name']} ({r.get('lang','?')}, ⭐{r.get('stars',0)}, {r.get('desc','')[:60]})"
+        for r in github_data.get('top_repos', [])[:6]
+    ) or '  none'
+
+    commits   = github_data.get('commit_count', 0)
+    repos     = github_data.get('public_repos', 0)
+    stars     = github_data.get('total_stars', 0)
+    forks     = github_data.get('total_forks', 0)
+    followers = github_data.get('followers', 0)
+    age_yrs   = round(github_data.get('account_age_days', 0) / 365, 1)
+
+    prompt = f"""You are a senior engineering recruiter evaluating a developer's GitHub credibility.
+Score each dimension honestly based on ALL signals together — not a rigid formula.
+
+DEVELOPER: @{username}
+- Account age: {age_yrs} years
+- Public repos: {repos}
+- Total stars earned: {stars}
+- Total forks: {forks}
+- Followers: {followers}
+- Commits last 12 months: {commits}
+- Languages: {langs or 'unknown'}
+
+TOP REPOS:
+{repos_text}
+
+Score these 5 dimensions. Each has a MAX shown. Be realistic and critical — reserve high scores for genuinely impressive profiles. An average active developer should score 45-65 total.
+
+Return ONLY this JSON, no markdown:
+{{
+  "github_depth": <0-30>,
+  "skill_evidence": <0-25>,
+  "project_quality": <0-20>,
+  "consistency": <0-15>,
+  "community": <0-10>,
+  "reasoning": "<1-2 sentences explaining the overall score>"
+}}
+
+Scoring guide:
+- github_depth (0-30): account age, repo count, language variety — 30 = 3+ years, 20+ repos, diverse languages
+- skill_evidence (0-25): commit volume + language breadth — 25 = 150+ commits/yr across 4+ languages
+- project_quality (0-20): stars, forks, useful repos — 20 = 30+ stars, 10+ forks, impactful projects
+- consistency (0-15): regular coding cadence — 15 = coding consistently throughout the year, not just spikes
+- community (0-10): followers, recognition — 10 = 25+ followers, community presence"""
+
+    raw = _generate(prompt)
+    import sys
+    print(f'[trust score raw for {username}]: {raw[:400]}', file=sys.stderr)
+
+    try:
+        result = _parse_json(raw)
+    except Exception as e:
+        raise ValueError(f'AI trust score unparseable: {e}\n{raw[:400]}')
+
+    # Clamp each dimension to its max
+    result['github_depth']    = max(0, min(int(result.get('github_depth',    0)), 30))
+    result['skill_evidence']  = max(0, min(int(result.get('skill_evidence',  0)), 25))
+    result['project_quality'] = max(0, min(int(result.get('project_quality', 0)), 20))
+    result['consistency']     = max(0, min(int(result.get('consistency',     0)), 15))
+    result['community']       = max(0, min(int(result.get('community',       0)), 10))
+    result['total']           = (
+        result['github_depth'] + result['skill_evidence'] +
+        result['project_quality'] + result['consistency'] + result['community']
+    )
+
+    _cache_set(username, 'trust_v1', result)
+    return result
+
+
 def generate_career_insights(github_data: dict, trust_score: dict, builder_score: dict) -> dict:
     username = github_data.get('username', '')
 

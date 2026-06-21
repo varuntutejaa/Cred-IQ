@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Shield, LayoutDashboard, FileText, Award,
   AlertOctagon, Rocket, Network, Link2, Users, Clock,
-  Swords, Brain, LogOut, ChevronLeft, ChevronRight,
+  Brain, LogOut, ChevronLeft, ChevronRight,
   Zap, Trophy, Code2, Star, ExternalLink
 } from 'lucide-react'
 import { useState } from 'react'
@@ -48,8 +48,7 @@ const NAV_GROUPS = [
   {
     label: 'Tools',
     items: [
-      { to: '/dashboard/battle',     icon: Swords, label: 'Portfolio Battle' },
-      { to: '/dashboard/complexity', icon: Code2,  label: 'Code Complexity'  },
+      { to: '/dashboard/complexity', icon: Code2, label: 'Code Complexity' },
     ],
   },
 ]

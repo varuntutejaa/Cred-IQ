@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Zap, Search, CheckCircle, XCircle, AlertCircle, GitBranch, Star, BookMarked, Download, Shield, Users, GitCommit, Eye } from 'lucide-react'
+import { Zap, Search, CheckCircle, XCircle, AlertCircle, GitBranch, Star, BookMarked, Download, Shield, Users, GitCommit, Eye, Brain } from 'lucide-react'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
@@ -94,6 +94,8 @@ export default function QuickVerify() {
         skills:       (profile.languages || []).slice(0, 6).map((l) => l.name),
         checks,
         radarData,
+        aiReasoning:  verify.trust_score?.reasoning || null,
+        aiScored:     verify.trust_score?.ai_scored ?? false,
         summary: `${profile.name || handle} has a trust score of ${trust}/100 and builder score of ${builder}/100. ${profile.public_repos} public repos with ${(profile.commit_count || 0).toLocaleString()} commits in the past year.${profile.bio ? ' ' + profile.bio : ''}`,
       }
       setResult(resolvedResult)
@@ -221,6 +223,14 @@ export default function QuickVerify() {
                 </div>
               </div>
               <p className="text-sm text-dark-300 mt-4 leading-relaxed border-t border-white/5 pt-4">{result.summary}</p>
+              {result.aiReasoning && (
+                <div className="mt-3 p-3 rounded-xl bg-brand-500/5 border border-brand-500/15">
+                  <p className="text-[10px] text-brand-400 font-semibold mb-1 flex items-center gap-1.5">
+                    <Brain size={10} /> AI Trust Reasoning
+                  </p>
+                  <p className="text-xs text-dark-300 leading-relaxed">{result.aiReasoning}</p>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

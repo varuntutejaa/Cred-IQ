@@ -12,7 +12,6 @@ import SkillMap from '../components/dashboard/SkillMap'
 import ProofChain from '../components/dashboard/ProofChain'
 import TeamAnalyzer from '../components/dashboard/TeamAnalyzer'
 import DevTimeline from '../components/dashboard/DevTimeline'
-import PortfolioBattle from '../components/dashboard/PortfolioBattle'
 import AIInsights from '../components/dashboard/AIInsights'
 import BuilderConfidence from '../components/dashboard/BuilderConfidence'
 import Achievements from '../components/dashboard/Achievements'
@@ -166,7 +165,6 @@ export default function Dashboard() {
             <Route path="achievements"       element={<Achievements />}        />
             <Route path="milestones"         element={<Milestones />}          />
             <Route path="builder"            element={<BuilderConfidence />}   />
-            <Route path="battle"             element={<PortfolioBattle />}     />
             <Route path="complexity"         element={<CodeComplexity />}      />
             <Route path="insights"           element={<AIInsights />}          />
           </Routes>

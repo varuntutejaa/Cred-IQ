@@ -47,7 +47,7 @@ def compute_builder_score(username: str, repos=None) -> dict:
 
     # -- Code Volume (25) --
     total_kb  = sum(r.size for r in repos)
-    vol_score = min(total_kb / 50000 * 25, 25)
+    vol_score = min(total_kb / 10000 * 25, 25)  # full at 10MB — realistic for most devs
 
     # -- Project Diversity (20) --
     domains_hit = set()
