@@ -569,11 +569,11 @@ export default function DashboardHome() {
           </div>
 
           {GRID.length > 0 ? (
-            <div className="grid grid-cols-[repeat(52,_1fr)] gap-[2.5px]">
+            <div style={{ display: 'grid', gridTemplateRows: 'repeat(7, 1fr)', gridAutoFlow: 'column', gap: '2.5px' }}>
               {GRID.map((v, i) => <div key={i} className={`aspect-square rounded-[2px] ${INTENSITY[v]}`} />)}
             </div>
           ) : (
-            <div className="grid grid-cols-[repeat(52,_1fr)] gap-[2.5px]">
+            <div style={{ display: 'grid', gridTemplateRows: 'repeat(7, 1fr)', gridAutoFlow: 'column', gap: '2.5px' }}>
               {Array.from({ length: 364 }, (_, i) => (
                 <div key={i} className="aspect-square rounded-[2px] bg-dark-800/60 animate-pulse"
                   style={{ animationDelay: `${(i % 20) * 18}ms` }} />
