@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Award, CheckCircle, AlertTriangle, XCircle, Zap, Plus, X,
   ExternalLink, Calendar, Building2, Brain, BookOpen, Briefcase,
   Target, TrendingUp, Sparkles, Trash2, ChevronDown, ChevronUp,
-  Shield, Loader2,
+  Shield, Upload, FileText, Image, UploadCloud,
 } from 'lucide-react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -20,36 +21,101 @@ const STATUS = {
 const DIFFICULTY_COLOR = { beginner: 'text-emerald-400', intermediate: 'text-yellow-400', advanced: 'text-orange-400', expert: 'text-red-400' }
 const VALUE_COLOR       = { high: 'text-emerald-400', medium: 'text-yellow-400', low: 'text-red-400' }
 
-const STEPS = ['Parsing certificate details', 'Checking issuer database', 'Validating verification URL', 'AI skill analysis with Groq']
+const UPLOAD_STEPS  = ['Reading file', 'Extracting certificate details with AI', 'Checking issuer database', 'AI skill analysis with Groq']
+const MANUAL_STEPS  = ['Parsing details', 'Checking issuer database', 'Validating URL', 'AI skill analysis with Groq']
+
+function LoadingSteps({ steps, step }) {
+  return (
+    <div className="space-y-3 py-2">
+      <p className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <Brain size={15} className="text-brand-400 animate-pulse" /> Analysing…
+      </p>
+      {steps.map((s, i) => (
+        <div key={s} className={`flex items-center gap-3 text-sm transition-all ${i <= step ? 'text-white' : 'text-dark-600'}`}>
+          {i < step
+            ? <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-[10px] shrink-0">✓</div>
+            : i === step
+            ? <div className="w-5 h-5 rounded-full border-2 border-brand-500 border-t-transparent animate-spin shrink-0" />
+            : <div className="w-5 h-5 rounded-full border border-white/10 shrink-0" />
+          }
+          {s}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function AddCertModal({ onClose, onResult }) {
-  const [form, setForm]   = useState({ name: '', issuer: '', date: '', url: '' })
+  const [tab, setTab]       = useState('upload')   // 'upload' | 'manual'
+  const [file, setFile]     = useState(null)
+  const [preview, setPreview] = useState(null)
+  const [form, setForm]     = useState({ name: '', issuer: '', date: '', url: '' })
   const [loading, setLoading] = useState(false)
-  const [step, setStep]   = useState(0)
+  const [step, setStep]     = useState(0)
 
-  const handleSubmit = async (e) => {
+  const onDrop = useCallback((accepted) => {
+    const f = accepted[0]
+    if (!f) return
+    setFile(f)
+    if (f.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onload = (e) => setPreview(e.target.result)
+      reader.readAsDataURL(f)
+    } else {
+      setPreview(null)
+    }
+  }, [])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'], 'application/pdf': ['.pdf'] },
+    maxFiles: 1,
+    maxSize: 15 * 1024 * 1024,
+  })
+
+  const tickSteps = async (steps) => {
+    for (let i = 0; i < steps.length; i++) {
+      setStep(i)
+      await new Promise(r => setTimeout(r, 800))
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!file) { toast.error('Select a file first'); return }
+    setLoading(true)
+    tickSteps(UPLOAD_STEPS)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const { data } = await axios.post('/api/certificate/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      onResult({ ...data, id: Date.now() })
+      toast.success('Certificate analysed!')
+      onClose()
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Upload failed — try entering details manually')
+      setLoading(false)
+    }
+  }
+
+  const handleManual = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) { toast.error('Enter a certificate name'); return }
     setLoading(true)
-
-    for (let i = 0; i < STEPS.length; i++) {
-      setStep(i)
-      await new Promise(r => setTimeout(r, 700))
-    }
-
+    tickSteps(MANUAL_STEPS)
     try {
       const { data } = await axios.post('/api/certificate/analyze', {
-        name:   form.name.trim(),
-        issuer: form.issuer.trim(),
-        date:   form.date.trim(),
-        url:    form.url.trim(),
+        name: form.name.trim(), issuer: form.issuer.trim(),
+        date: form.date.trim(), url: form.url.trim(),
       })
       onResult({ ...data, id: Date.now() })
       toast.success('Certificate analysed!')
       onClose()
     } catch (err) {
       toast.error(err?.response?.data?.error || 'Analysis failed — try again')
-    } finally { setLoading(false) }
+      setLoading(false)
+    }
   }
 
   return (
@@ -61,62 +127,117 @@ function AddCertModal({ onClose, onResult }) {
         className="glass-card gradient-border w-full max-w-md"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="font-bold text-white">Add Certificate</h3>
-            <p className="text-xs text-dark-400 mt-0.5">AI will analyse skills learned & verify the issuer</p>
+            <p className="text-xs text-dark-400 mt-0.5">AI extracts details + analyses skills learned</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-dark-400 hover:text-white transition-all">
             <X size={15} />
           </button>
         </div>
 
-        {!loading ? (
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {[
-              { key: 'name',   label: 'Certificate Name *', placeholder: 'e.g. AWS Solutions Architect Associate' },
-              { key: 'issuer', label: 'Issuer',             placeholder: 'e.g. Amazon Web Services, Coursera, Google' },
-              { key: 'date',   label: 'Date Issued',        placeholder: 'e.g. Oct 2023' },
-              { key: 'url',    label: 'Verification URL',   placeholder: 'https://aws.amazon.com/verify/...' },
-            ].map(({ key, label, placeholder }) => (
-              <div key={key}>
-                <label className="text-xs text-dark-400 mb-1.5 block">{label}</label>
-                <input
-                  type={key === 'url' ? 'url' : 'text'}
-                  placeholder={placeholder}
-                  value={form[key]}
-                  onChange={e => setForm({ ...form, [key]: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-dark-500 focus:outline-none focus:border-brand-500/60 transition-all"
-                />
-              </div>
-            ))}
-            <div className="pt-1 p-3 rounded-xl bg-brand-500/5 border border-brand-500/15 text-xs text-dark-400">
-              <Sparkles size={10} className="inline text-brand-400 mr-1" />
-              AI will identify skills learned, career impact, complementary skills to learn, and relevant job roles.
-            </div>
-            <button type="submit"
-              className="btn-primary w-full flex items-center justify-center gap-2 mt-1"
-            >
-              <Zap size={14} /> Analyse Certificate
-            </button>
-          </form>
+        {loading ? (
+          <LoadingSteps steps={tab === 'upload' ? UPLOAD_STEPS : MANUAL_STEPS} step={step} />
         ) : (
-          <div className="space-y-3 py-2">
-            <p className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-              <Brain size={15} className="text-brand-400 animate-pulse" /> Analysing…
-            </p>
-            {STEPS.map((s, i) => (
-              <div key={s} className={`flex items-center gap-3 text-sm transition-all ${i <= step ? 'text-white' : 'text-dark-600'}`}>
-                {i < step
-                  ? <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-[10px] shrink-0">✓</div>
-                  : i === step
-                  ? <div className="w-5 h-5 rounded-full border-2 border-brand-500 border-t-transparent animate-spin shrink-0" />
-                  : <div className="w-5 h-5 rounded-full border border-white/10 shrink-0" />
-                }
-                {s}
+          <>
+            {/* Tabs */}
+            <div className="flex gap-1 p-1 glass rounded-xl mb-4">
+              {[
+                { key: 'upload', icon: UploadCloud, label: 'Upload File' },
+                { key: 'manual', icon: FileText,    label: 'Enter Manually' },
+              ].map(({ key, icon: Icon, label }) => (
+                <button key={key} onClick={() => setTab(key)}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    tab === key ? 'bg-brand-500 text-white shadow-glow-sm' : 'text-dark-400 hover:text-white'
+                  }`}
+                >
+                  <Icon size={13} /> {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Upload tab */}
+            {tab === 'upload' && (
+              <div className="space-y-3">
+                <div {...getRootProps()}
+                  className={`relative border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                    isDragActive
+                      ? 'border-brand-500 bg-brand-500/10'
+                      : file
+                      ? 'border-emerald-500/40 bg-emerald-500/5'
+                      : 'border-white/10 hover:border-brand-500/40 hover:bg-white/[0.02]'
+                  }`}
+                >
+                  <input {...getInputProps()} />
+
+                  {file ? (
+                    <div className="space-y-2">
+                      {preview ? (
+                        <img src={preview} alt="preview" className="max-h-40 mx-auto rounded-xl object-contain" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto">
+                          <FileText size={22} className="text-red-400" />
+                        </div>
+                      )}
+                      <p className="text-xs font-medium text-emerald-400">{file.name}</p>
+                      <p className="text-[10px] text-dark-500">{(file.size / 1024).toFixed(0)} KB · click to change</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto">
+                        <UploadCloud size={22} className="text-dark-400" />
+                      </div>
+                      <p className="text-sm font-medium text-white">
+                        {isDragActive ? 'Drop it here' : 'Drag & drop or click to upload'}
+                      </p>
+                      <p className="text-xs text-dark-500">PNG, JPG, JPEG, WEBP or PDF · max 15 MB</p>
+                    </div>
+                  )}
+                </div>
+
+                {file && (
+                  <div className="p-3 rounded-xl bg-brand-500/5 border border-brand-500/15 text-xs text-dark-400">
+                    <Brain size={10} className="inline text-brand-400 mr-1" />
+                    AI will read the certificate, extract the name, issuer, and date, then analyse skills and career impact.
+                  </div>
+                )}
+
+                <button onClick={handleUpload} disabled={!file}
+                  className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <Zap size={14} /> Analyse Certificate
+                </button>
               </div>
-            ))}
-          </div>
+            )}
+
+            {/* Manual tab */}
+            {tab === 'manual' && (
+              <form onSubmit={handleManual} className="space-y-3">
+                {[
+                  { key: 'name',   label: 'Certificate Name *', placeholder: 'e.g. AWS Solutions Architect Associate' },
+                  { key: 'issuer', label: 'Issuer',             placeholder: 'e.g. Amazon Web Services, Coursera, Google' },
+                  { key: 'date',   label: 'Date Issued',        placeholder: 'e.g. Oct 2023' },
+                  { key: 'url',    label: 'Verification URL',   placeholder: 'https://aws.amazon.com/verify/...' },
+                ].map(({ key, label, placeholder }) => (
+                  <div key={key}>
+                    <label className="text-xs text-dark-400 mb-1.5 block">{label}</label>
+                    <input
+                      type={key === 'url' ? 'url' : 'text'}
+                      placeholder={placeholder}
+                      value={form[key]}
+                      onChange={e => setForm({ ...form, [key]: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-dark-500 focus:outline-none focus:border-brand-500/60 transition-all"
+                    />
+                  </div>
+                ))}
+                <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2">
+                  <Zap size={14} /> Analyse Certificate
+                </button>
+              </form>
+            )}
+          </>
         )}
       </motion.div>
     </motion.div>
@@ -150,10 +271,17 @@ function CertCard({ cert, onDelete }) {
                 Known Issuer
               </span>
             )}
+            {cert.extracted && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 font-semibold">
+                AI Extracted
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             {cert.issuer && <span className="text-xs text-dark-400 flex items-center gap-1"><Building2 size={10} />{cert.issuer}</span>}
             {cert.date   && <span className="text-xs text-dark-400 flex items-center gap-1"><Calendar size={10} />{cert.date}</span>}
+            {cert.extracted?.recipient && <span className="text-xs text-dark-500">Issued to: {cert.extracted.recipient}</span>}
+            {cert.extracted?.credential_id && <span className="text-xs text-dark-500 font-mono">ID: {cert.extracted.credential_id}</span>}
             {cert.verification?.issuer_category && (
               <span className="text-xs text-dark-500">{cert.verification.issuer_category}</span>
             )}
