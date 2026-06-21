@@ -89,6 +89,44 @@ def _cache_set(username: str, kind: str, payload: dict):
 
 # ─── Public API ────────────────────────────────────────────────────────────────
 
+def analyze_certificate_skills(name: str, issuer: str, date: str) -> dict:
+    """AI analysis of skills learned, career value, and insights from a certificate."""
+    cache_key = f'{name.lower().replace(" ", "_")}__{issuer.lower().replace(" ", "_")}'
+
+    cached = _cache_get(cache_key, 'cert_v1')
+    if cached:
+        return cached
+
+    prompt = f"""You are a technical career advisor. Analyse this professional certificate and return detailed insights.
+
+Certificate: {name}
+Issuer: {issuer or 'Unknown'}
+Date: {date or 'Unknown'}
+
+Return ONLY a JSON object, no markdown, all fields required:
+{{
+  "skills_learned": ["<specific technical skill 1>", "<skill 2>", "<skill 3>", "<skill 4>", "<skill 5>"],
+  "skill_analysis": "<2-3 sentences: what this certificate proves the holder knows and can do in practice>",
+  "career_insights": "<2 sentences: how this certificate impacts career prospects and what roles it unlocks>",
+  "industry_value": "high",
+  "difficulty_level": "intermediate",
+  "complementary_skills": ["<related skill to learn next>", "<skill 2>", "<skill 3>"],
+  "job_roles": ["<relevant job title 1>", "<title 2>", "<title 3>"],
+  "real_world_applications": ["<practical use case 1>", "<use case 2>", "<use case 3>"]
+}}
+industry_value must be one of: high, medium, low
+difficulty_level must be one of: beginner, intermediate, advanced, expert"""
+
+    raw = _generate(prompt)
+    try:
+        result = _parse_json(raw)
+    except Exception as e:
+        raise ValueError(f'Certificate AI parse error: {e}\n{raw[:300]}')
+
+    _cache_set(cache_key, 'cert_v1', result)
+    return result
+
+
 def generate_trust_score(github_data: dict, top_repos_raw=None) -> dict:
     """AI-powered trust score — Groq evaluates all signals holistically."""
     username = github_data.get('username', '')
