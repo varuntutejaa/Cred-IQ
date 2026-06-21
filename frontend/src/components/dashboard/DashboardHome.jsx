@@ -152,7 +152,7 @@ function ScoreAnalysisCard({ username }) {
       {/* Idle placeholder */}
       {state === 'idle' && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {['Why is my Trust Score X?', 'What's limiting my Builder Score?', 'Which dimension to improve first?', 'Specific tips for each score'].map(q => (
+          {['Why is my Trust Score X?', "What's limiting my Builder Score?", 'Which dimension to improve first?', 'Specific tips for each score'].map(q => (
             <div key={q} className="p-3 rounded-xl bg-white/[0.025] border border-white/[0.05] flex items-start gap-2">
               <ChevronRight size={11} className="text-brand-500 mt-0.5 shrink-0" />
               <p className="text-[10px] text-dark-400 leading-relaxed">{q}</p>
