@@ -92,7 +92,7 @@ def _cache_set(username: str, kind: str, payload: dict):
 def generate_career_insights(github_data: dict, trust_score: dict, builder_score: dict) -> dict:
     username = github_data.get('username', '')
 
-    cached = _cache_get(username, 'career_v2')
+    cached = _cache_get(username, 'career_v3')
     if cached:
         return cached
 
@@ -102,47 +102,45 @@ def generate_career_insights(github_data: dict, trust_score: dict, builder_score
         for r in github_data.get('top_repos', [])[:5]
     )
 
-    prompt = f"""You are a senior engineering career advisor and technical mentor. Analyse this developer's GitHub profile deeply and return rich, personalised AI insights.
+    prompt = f"""You are a senior engineering career advisor. Analyse this GitHub developer profile and respond with ONLY a JSON object — no markdown, no prose outside the JSON.
 
-DEVELOPER PROFILE:
-- GitHub: @{username}
-- Account age: {github_data.get('account_age_days', 0) // 365}y {(github_data.get('account_age_days', 0) % 365) // 30}m
-- Public repos: {github_data.get('public_repos', 0)}
-- Total stars earned: {github_data.get('total_stars', 0)}
-- Followers: {github_data.get('followers', 0)}
-- Commits (last 12 months): {github_data.get('commit_count', 0)}
-- Languages: {languages or 'unknown'}
-- CredIQ Trust Score: {trust_score.get('total', 'N/A')}/100
-- CredIQ Builder Score: {builder_score.get('total', 'N/A')}/100
+PROFILE:
+Username: {username}
+Account age: {github_data.get('account_age_days', 0) // 365}y {(github_data.get('account_age_days', 0) % 365) // 30}m
+Public repos: {github_data.get('public_repos', 0)}, Stars: {github_data.get('total_stars', 0)}, Followers: {github_data.get('followers', 0)}
+Commits (12mo): {github_data.get('commit_count', 0)}
+Languages: {languages or 'unknown'}
+Trust Score: {trust_score.get('total', 'N/A')}/100, Builder Score: {builder_score.get('total', 'N/A')}/100
+Top repos:
+{top_repos or '  none'}
 
-TOP REPOSITORIES:
-{top_repos or '  (none)'}
-
-Return ONLY a raw JSON object — no markdown, no code fences, no extra text outside the braces:
+ALL 11 fields below are REQUIRED. Do not omit any. Output exactly this JSON structure filled with real values:
 {{
-  "summary": "3-sentence honest assessment of this developer's profile, skill level, and overall positioning in the job market",
-  "strengths": ["specific strength with evidence from the profile", "strength 2", "strength 3", "strength 4"],
-  "gaps": ["specific skill gap or weakness 1", "gap 2", "gap 3"],
-  "recommended_roles": ["Specific job title 1", "job title 2", "job title 3"],
-  "learning_path": ["Specific technology or skill to learn next with a brief why", "learning item 2", "learning item 3", "learning item 4"],
-  "tech_stack_advice": "2-3 sentences on which specific technologies to adopt, which to drop, and what emerging tools fit their current stack trajectory",
-  "profile_improvements": ["Concrete GitHub profile or repo improvement 1", "improvement 2", "improvement 3"],
-  "open_source_advice": "2 sentences on how this developer should approach open source contributions given their current skill level and stack",
-  "next_steps": ["Concrete, actionable career step 1", "next step 2", "next step 3"],
+  "summary": "<3 sentences: honest profile assessment + market positioning>",
+  "strengths": ["<strength 1>", "<strength 2>", "<strength 3>", "<strength 4>"],
+  "gaps": ["<skill gap 1>", "<skill gap 2>", "<skill gap 3>"],
+  "recommended_roles": ["<job title 1>", "<job title 2>", "<job title 3>"],
+  "learning_path": ["<specific skill to learn + why>", "<skill 2>", "<skill 3>", "<skill 4>"],
+  "tech_stack_advice": "<2-3 sentences: what to adopt, what to drop, what fits their trajectory>",
+  "profile_improvements": ["<github profile fix 1>", "<fix 2>", "<fix 3>"],
+  "open_source_advice": "<2 sentences: how to approach open source given their stack and level>",
+  "next_steps": ["<concrete action 1>", "<action 2>", "<action 3>"],
   "market_fit": "high",
   "collaboration_potential": "high",
-  "standout_project": "repo name — one sentence on why it stands out above the rest"
+  "standout_project": "<repo name — one sentence why it stands out>"
 }}
-market_fit must be exactly one of: high, medium, low
-collaboration_potential must be exactly one of: high, medium, low"""
+market_fit must be one of: high, medium, low
+collaboration_potential must be one of: high, medium, low"""
 
     raw = _generate(prompt)
+    import sys
+    print(f"[AI raw for {username}]:\n{raw[:1000]}", file=sys.stderr)
     try:
         result = _parse_json(raw)
     except Exception as e:
-        raise ValueError(f'AI returned unparseable JSON: {e}\n\nRaw:\n{raw[:500]}')
+        raise ValueError(f'AI returned unparseable JSON: {e}\n\nRaw:\n{raw[:600]}')
 
-    _cache_set(username, 'career_v2', result)
+    _cache_set(username, 'career_v3', result)
     return result
 
 

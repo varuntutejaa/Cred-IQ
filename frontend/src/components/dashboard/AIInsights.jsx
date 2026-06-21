@@ -208,7 +208,7 @@ export default function AIInsights() {
                   <h2 className="font-semibold text-white mb-2 flex items-center gap-2">
                     <Brain size={16} className="text-brand-400" /> AI Summary
                   </h2>
-                  <p className="text-sm text-dark-200 leading-relaxed">{ins.summary}</p>
+                  <p className="text-sm text-dark-200 leading-relaxed">{ins.summary || '—'}</p>
                 </div>
                 <div className="flex gap-5 shrink-0 border-l border-white/5 pl-6">
                   <ScoreBadge value={insights.trust_score}   label="Trust Score"   />
@@ -236,11 +236,15 @@ export default function AIInsights() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               <ListCard
                 icon={TrendingUp} iconClass="text-emerald-400"
-                title="Strengths" items={ins.strengths || []} bullet="check"
+                title="Strengths"
+                items={ins.strengths?.length ? ins.strengths : ['Generating...']}
+                bullet="check"
               />
               <ListCard
                 icon={AlertTriangle} iconClass="text-yellow-400"
-                title="Skill Gaps" items={ins.gaps || []} bullet="arrow"
+                title="Skill Gaps"
+                items={ins.gaps?.length ? ins.gaps : ['Generating...']}
+                bullet="arrow"
               />
             </div>
 
@@ -248,15 +252,21 @@ export default function AIInsights() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               <ListCard
                 icon={Target} iconClass="text-brand-400"
-                title="Recommended Roles" items={ins.recommended_roles || []} bullet="arrow"
+                title="Recommended Roles"
+                items={ins.recommended_roles?.length ? ins.recommended_roles : ['Generating...']}
+                bullet="arrow"
               />
               <ListCard
                 icon={BookOpen} iconClass="text-purple-400"
-                title="Learning Path" items={ins.learning_path || []} bullet="number"
+                title="Learning Path"
+                items={ins.learning_path?.length ? ins.learning_path : ['Generating...']}
+                bullet="number"
               />
               <ListCard
                 icon={Wrench} iconClass="text-cyan-400"
-                title="Profile Improvements" items={ins.profile_improvements || []} bullet="check"
+                title="Profile Improvements"
+                items={ins.profile_improvements?.length ? ins.profile_improvements : ['Generating...']}
+                bullet="check"
               />
             </div>
 
@@ -265,13 +275,13 @@ export default function AIInsights() {
               <ProseCard
                 icon={Code2} iconClass="text-brand-400"
                 title="Tech Stack Advice"
-                text={ins.tech_stack_advice}
+                text={ins.tech_stack_advice || 'No advice generated — try regenerating.'}
                 accent="border-brand-500/15"
               />
               <ProseCard
                 icon={GitBranch} iconClass="text-purple-400"
                 title="Open Source Guidance"
-                text={ins.open_source_advice}
+                text={ins.open_source_advice || 'No advice generated — try regenerating.'}
                 accent="border-purple-500/15"
               />
             </div>
@@ -282,10 +292,10 @@ export default function AIInsights() {
                 <ArrowUpRight size={16} className="text-emerald-400" /> Next Steps
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {(ins.next_steps || []).map((step, i) => (
+                {(ins.next_steps?.length ? ins.next_steps : ['Generating...']).map((s, i) => (
                   <div key={i} className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 flex items-start gap-2.5">
                     <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                    <p className="text-sm text-dark-200 leading-relaxed">{step}</p>
+                    <p className="text-sm text-dark-200 leading-relaxed">{s}</p>
                   </div>
                 ))}
               </div>
