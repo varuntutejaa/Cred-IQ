@@ -1,3 +1,4 @@
+import os
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
 from ..db import get_db
@@ -97,14 +98,21 @@ def demo():
     if not github_username:
         return jsonify({'message': 'github_username is required'}), 400
 
+    if not os.getenv('GITHUB_ACCESS_TOKEN'):
+        return jsonify({'message': 'GitHub token not configured. Add GITHUB_ACCESS_TOKEN to backend/.env'}), 503
+
     # Fetch real GitHub profile
     github_data = analyze_profile(github_username)
     if 'error' in github_data:
-        return jsonify({'message': f'GitHub user not found: {github_data["error"]}'}), 404
+        err = github_data['error']
+        if 'rate limit' in err.lower():
+            return jsonify({'message': 'GitHub rate limit hit. Add GITHUB_ACCESS_TOKEN to backend/.env'}), 429
+        return jsonify({'message': f'GitHub user not found: {err}'}), 404
 
-    # Compute real scores
-    trust   = compute_trust_score(github_username)
-    builder = compute_builder_score(github_username)
+    # Reuse already-fetched data — no duplicate GitHub API calls
+    raw_repos = github_data.pop('_raw_repos', None)
+    trust   = compute_trust_score(github_username, github_data=github_data)
+    builder = compute_builder_score(github_username, repos=raw_repos)
 
     top_skills = [l['name'] for l in github_data.get('languages', [])[:5]]
 
@@ -121,15 +129,19 @@ def demo():
         'builder_score':    builder.get('total'),
         'github_score':     min(round(github_data.get('total_stars', 0) / 10 + github_data.get('followers', 0) / 5), 100),
         'verified_skills':  top_skills,
-        'public_repos':     github_data.get('public_repos', 0),
-        'total_stars':      github_data.get('total_stars', 0),
-        'followers':        github_data.get('followers', 0),
-        'commit_count':     github_data.get('commit_count', 0),
-        'languages':        github_data.get('languages', []),
-        'top_repos':        github_data.get('top_repos', []),
-        'trust_breakdown':  trust.get('dimensions', {}),
-        'builder_breakdown': builder.get('dimensions', {}),
-        'is_demo':          True,
+        'public_repos':       github_data.get('public_repos', 0),
+        'total_stars':        github_data.get('total_stars', 0),
+        'total_forks':        github_data.get('total_forks', 0),
+        'followers':          github_data.get('followers', 0),
+        'following':          github_data.get('following', 0),
+        'commit_count':       github_data.get('commit_count', 0),
+        'account_age_days':   github_data.get('account_age_days', 0),
+        'account_created_at': github_data.get('account_created_at'),
+        'languages':          github_data.get('languages', []),
+        'top_repos':          github_data.get('top_repos', []),
+        'trust_breakdown':    trust.get('dimensions', {}),
+        'builder_breakdown':  builder.get('dimensions', {}),
+        'is_demo':            True,
     }
 
     token = create_access_token(

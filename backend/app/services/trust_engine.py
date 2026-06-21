@@ -13,33 +13,34 @@ Composite score (0-100) built from 5 weighted dimensions:
 from .github_service import analyze_profile
 
 
-def compute_trust_score(username: str) -> dict:
-    data = analyze_profile(username)
+def compute_trust_score(username: str, github_data: dict = None) -> dict:
+    """Pass github_data to skip a redundant API call."""
+    data = github_data or analyze_profile(username)
     if 'error' in data:
         return {'error': data['error'], 'username': username}
 
     # -- GitHub Depth (30) --
-    age_score       = min(data['account_age_days'] / 730 * 30, 30)   # max out at 2 years
+    age_score       = min(data['account_age_days'] / 730 * 30, 30)
     repo_score      = min(data['public_repos'] / 20 * 10, 10)
     lang_diversity  = min(len(data['languages']) / 5 * 10, 10)
     github_depth    = round(age_score * 0.5 + repo_score * 0.25 + lang_diversity * 0.25)
 
-    # -- Skill Evidence (25) -- proxy: language breadth + commit density
-    commit_score    = min(data['commit_count'] / 200 * 25, 25)
-    skill_evidence  = round(commit_score)
+    # -- Skill Evidence (25) --
+    commit_score   = min(data['commit_count'] / 200 * 25, 25)
+    skill_evidence = round(commit_score)
 
     # -- Project Quality (20) --
     star_score      = min(data['total_stars'] / 50 * 15, 15)
     repo_quality    = min(data['public_repos'] / 10 * 5, 5)
     project_quality = round(star_score + repo_quality)
 
-    # -- Consistency (15) -- commit count as proxy (no per-week data without heavy API calls)
-    consistency     = round(min(data['commit_count'] / 100 * 15, 15))
+    # -- Consistency (15) --
+    consistency = round(min(data['commit_count'] / 100 * 15, 15))
 
     # -- Community (10) --
-    follower_score  = min(data['followers'] / 100 * 6, 6)
-    fork_score      = min(data['total_forks'] / 20 * 4, 4)
-    community       = round(follower_score + fork_score)
+    follower_score = min(data['followers'] / 100 * 6, 6)
+    fork_score     = min(data['total_forks'] / 20 * 4, 4)
+    community      = round(follower_score + fork_score)
 
     total = min(github_depth + skill_evidence + project_quality + consistency + community, 100)
 

@@ -2,7 +2,7 @@ from pymongo import MongoClient
 from pymongo.database import Database
 import os
 
-_client: MongoClient | None = None
+_client: "Optional[MongoClient]" = None
 
 def get_db() -> Database:
     global _client

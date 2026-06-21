@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Shield, Mail, Lock, Eye, EyeOff, ArrowRight, Code2, Briefcase, Github, X, Sparkles } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { FIREBASE_CONFIGURED } from '../firebase'
 import toast from 'react-hot-toast'
 
 export default function Login() {
@@ -31,6 +32,7 @@ export default function Login() {
   }
 
   const handleGoogle = async () => {
+    if (!FIREBASE_CONFIGURED) { toast.error('Add VITE_FIREBASE_* keys to frontend/.env to enable Google login'); return }
     setLoading(true)
     try {
       const user = await loginWithGoogle(role)
@@ -42,6 +44,7 @@ export default function Login() {
   }
 
   const handleGitHub = async () => {
+    if (!FIREBASE_CONFIGURED) { toast.error('Add VITE_FIREBASE_* keys to frontend/.env to enable GitHub login'); return }
     setLoading(true)
     try {
       const user = await loginWithGitHub(role)

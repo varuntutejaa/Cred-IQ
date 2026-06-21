@@ -1,66 +1,65 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Code2, Zap, AlertTriangle, CheckCircle, GitBranch, RefreshCw, ChevronDown, ChevronRight, Info } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis } from 'recharts'
+import { Code2, Zap, AlertTriangle, CheckCircle, GitBranch, RefreshCw, ChevronDown, ChevronRight, Info, ArrowLeft } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, Cell } from 'recharts'
+import { useAuth } from '../../context/AuthContext'
 import TechLogo from '../shared/TechLogo'
+import axios from 'axios'
+import toast from 'react-hot-toast'
 
-const MOCK_FILES = [
-  { path: 'src/auth/jwt_handler.py',       lang: 'Python',     loc: 312, complexity: 28, maintainability: 62, risk: 'high',   cognitive: 41, duplication: 8  },
-  { path: 'src/routes/expense_routes.py',  lang: 'Python',     loc: 198, complexity: 14, maintainability: 81, risk: 'medium', cognitive: 19, duplication: 3  },
-  { path: 'src/models/user.py',            lang: 'Python',     loc: 87,  complexity: 6,  maintainability: 92, risk: 'low',    cognitive: 8,  duplication: 0  },
-  { path: 'components/Dashboard.tsx',      lang: 'TypeScript', loc: 424, complexity: 31, maintainability: 58, risk: 'high',   cognitive: 47, duplication: 12 },
-  { path: 'components/Chart.tsx',          lang: 'TypeScript', loc: 156, complexity: 9,  maintainability: 88, risk: 'low',    cognitive: 11, duplication: 1  },
-  { path: 'hooks/useAuth.ts',              lang: 'TypeScript', loc: 63,  complexity: 5,  maintainability: 96, risk: 'low',    cognitive: 6,  duplication: 0  },
-  { path: 'api/github_service.py',         lang: 'Python',     loc: 267, complexity: 22, maintainability: 71, risk: 'medium', cognitive: 29, duplication: 5  },
-  { path: 'utils/validator.ts',            lang: 'TypeScript', loc: 94,  complexity: 7,  maintainability: 90, risk: 'low',    cognitive: 9,  duplication: 2  },
-]
-
-const RADAR_DATA = [
-  { dim: 'Readability',    v: 78 },
-  { dim: 'Maintainability',v: 71 },
-  { dim: 'Test Coverage',  v: 64 },
-  { dim: 'Complexity',     v: 59 },
-  { dim: 'Duplication',    v: 82 },
-  { dim: 'Documentation',  v: 55 },
-]
-
-const LANG_COMPLEXITY = [
-  { lang: 'Python',     avg: 14.2, files: 5 },
-  { lang: 'TypeScript', avg: 11.8, files: 4 },
-]
+const STEPS = ['Reading file tree', 'Fetching source files', 'Computing cyclomatic complexity', 'Calculating maintainability index', 'Detecting duplication', 'Building report']
 
 const RISK_CONFIG = {
-  high:   { label: 'High Risk',   color: '#ef4444', bg: 'bg-red-500/15    border-red-500/25    text-red-300'    },
-  medium: { label: 'Med Risk',    color: '#f59e0b', bg: 'bg-yellow-500/15 border-yellow-500/25 text-yellow-300' },
-  low:    { label: 'Low Risk',    color: '#10b981', bg: 'bg-emerald-500/15 border-emerald-500/25 text-emerald-300'},
+  high:   { label: 'High Risk',  color: '#ef4444', bg: 'bg-red-500/15    border-red-500/25    text-red-300'    },
+  medium: { label: 'Med Risk',   color: '#f59e0b', bg: 'bg-yellow-500/15 border-yellow-500/25 text-yellow-300' },
+  low:    { label: 'Low Risk',   color: '#10b981', bg: 'bg-emerald-500/15 border-emerald-500/25 text-emerald-300'},
 }
 
-const REPO_OPTIONS = [
-  'expense-tracker (Python/Flask)',
-  'ai-resume-builder (TypeScript/React)',
-  'dsa-solutions (Python)',
-  'portfolio-v3 (React)',
-]
+function parseRepoInput(raw) {
+  const cleaned = raw.trim().replace(/^https?:\/\//, '').replace(/^github\.com\//, '').replace(/\/$/, '')
+  const parts = cleaned.split('/')
+  if (parts.length >= 2) return { owner: parts[0], repo: parts[1] }
+  return null
+}
 
 export default function CodeComplexity() {
-  const [repo,     setRepo]     = useState('')
+  const { user } = useAuth()
+  const [url,      setUrl]      = useState('')
   const [loading,  setLoading]  = useState(false)
-  const [analyzed, setAnalyzed] = useState(false)
+  const [step,     setStep]     = useState(0)
+  const [data,     setData]     = useState(null)
   const [expanded, setExpanded] = useState(null)
   const [sortBy,   setSortBy]   = useState('complexity')
 
-  const analyze = async () => {
-    if (!repo) return
+  const analyze = async (repoUrl) => {
+    const target = repoUrl || url
+    const parsed = parseRepoInput(target)
+    if (!parsed) { toast.error('Enter a valid GitHub URL or owner/repo'); return }
+
     setLoading(true)
-    setAnalyzed(false)
-    await new Promise((r) => setTimeout(r, 2200))
-    setAnalyzed(true)
-    setLoading(false)
+    setData(null)
+
+    for (let i = 0; i < STEPS.length; i++) {
+      setStep(i)
+      await new Promise((r) => setTimeout(r, 600))
+    }
+
+    try {
+      const { data: res } = await axios.get(`/api/complexity/${parsed.owner}/${parsed.repo}`)
+      setData(res)
+      toast.success(`Analyzed ${res.summary.files_analyzed} files in ${res.repo}`)
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to analyze repository')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const sorted = [...MOCK_FILES].sort((a, b) => b[sortBy] - a[sortBy])
-  const overall = Math.round(MOCK_FILES.reduce((s, f) => s + f.maintainability, 0) / MOCK_FILES.length)
-  const highRisk = MOCK_FILES.filter((f) => f.risk === 'high').length
+  const reset = () => { setData(null); setUrl('') }
+
+  const files  = data?.files  || []
+  const sorted = [...files].sort((a, b) => b[sortBy] - a[sortBy])
+  const s      = data?.summary || {}
 
   return (
     <div className="space-y-6">
@@ -71,64 +70,92 @@ export default function CodeComplexity() {
           </h1>
           <p className="text-sm text-dark-300 mt-1">Cyclomatic complexity, maintainability index, and risk analysis per file</p>
         </div>
-        {analyzed && (
-          <button onClick={() => { setAnalyzed(false); setRepo('') }} className="btn-secondary flex items-center gap-2 text-sm">
-            <RefreshCw size={14} /> New Analysis
+        {data && (
+          <button onClick={reset} className="btn-secondary flex items-center gap-2 text-sm">
+            <ArrowLeft size={14} /> New Analysis
           </button>
         )}
       </div>
 
-      {!analyzed ? (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card gradient-border max-w-xl">
-          <p className="text-sm font-semibold text-white mb-1">Select a repository</p>
-          <p className="text-xs text-dark-400 mb-4">CredIQ will scan all source files and compute complexity metrics</p>
-          <div className="space-y-2 mb-4">
-            {REPO_OPTIONS.map((r) => (
-              <button key={r} onClick={() => setRepo(r)}
-                className={`w-full text-left px-4 py-3 rounded-xl text-sm border transition-all flex items-center gap-3 ${
-                  repo === r ? 'bg-brand-500/15 border-brand-500/30 text-brand-300' : 'glass border-white/8 text-dark-300 hover:text-white hover:border-white/15'
-                }`}
-              >
-                <GitBranch size={13} className={repo === r ? 'text-brand-400' : 'text-dark-500'} />
-                {r}
-                {repo === r && <CheckCircle size={12} className="ml-auto text-brand-400" />}
-              </button>
-            ))}
-          </div>
-          <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={analyze} disabled={!repo || loading}
-            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
+      <AnimatePresence mode="wait">
+        {/* Input state */}
+        {!data && !loading && (
+          <motion.div key="input" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="glass-card gradient-border max-w-xl"
           >
-            {loading
-              ? <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Scanning files…
-                </>
-              : <><Zap size={14} /> Analyze Complexity</>
-            }
-          </motion.button>
-          {loading && (
-            <div className="mt-4 space-y-2">
-              {['Cloning repository', 'Parsing AST', 'Computing cyclomatic complexity', 'Calculating maintainability index', 'Detecting duplication', 'Generating report'].map((step, i) => (
-                <motion.div key={step} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.32 }}
-                  className="flex items-center gap-2 text-xs text-dark-400"
-                >
-                  <div className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" style={{ animationDelay: `${i * 300}ms` }} />
-                  {step}
-                </motion.div>
+            <p className="text-sm font-semibold text-white mb-1">Enter a GitHub repository</p>
+            <p className="text-xs text-dark-400 mb-4">CredIQ will fetch source files and compute complexity metrics</p>
+
+            <div className="flex gap-3 mb-4">
+              <div className="relative flex-1">
+                <GitBranch size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-dark-400" />
+                <input
+                  type="text" placeholder="github.com/owner/repo  or  owner/repo"
+                  value={url} onChange={(e) => setUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && analyze()}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-dark-400 focus:outline-none focus:border-brand-500/60 transition-all"
+                />
+              </div>
+              <button onClick={() => analyze()} disabled={!url.trim()} className="btn-primary px-5 flex items-center gap-2 disabled:opacity-60">
+                <Zap size={14} /> Analyze
+              </button>
+            </div>
+
+            {/* Quick-select: user's own repos */}
+            {user?.top_repos?.length > 0 && (
+              <>
+                <p className="text-xs text-dark-400 mb-2">Or pick one of your repos:</p>
+                <div className="space-y-1.5">
+                  {user.top_repos.slice(0, 4).map((r) => (
+                    <button key={r.name}
+                      onClick={() => { setUrl(r.url); analyze(r.url) }}
+                      className="w-full text-left px-4 py-2.5 rounded-xl text-sm border glass border-white/8 text-dark-300 hover:text-white hover:border-white/15 flex items-center gap-3 transition-all"
+                    >
+                      <GitBranch size={12} className="text-dark-500 shrink-0" />
+                      <span className="font-mono truncate">{r.name}</span>
+                      <span className="text-[10px] text-dark-500 ml-auto shrink-0">{r.lang}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="glass-card gradient-border max-w-lg"
+          >
+            <p className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+              <Code2 size={15} className="text-cyan-400" /> Scanning files…
+            </p>
+            <div className="space-y-3">
+              {STEPS.map((s, i) => (
+                <div key={s} className={`flex items-center gap-3 text-sm transition-all duration-300 ${i <= step ? 'text-white' : 'text-dark-500'}`}>
+                  {i < step
+                    ? <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 text-[10px]">✓</div>
+                    : i === step
+                    ? <div className="w-5 h-5 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin shrink-0" />
+                    : <div className="w-5 h-5 rounded-full border border-white/10 shrink-0" />
+                  }
+                  {s}
+                </div>
               ))}
             </div>
-          )}
-        </motion.div>
-      ) : (
-        <AnimatePresence>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
+          </motion.div>
+        )}
+
+        {/* Results */}
+        {data && (
+          <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
             {/* Summary cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Overall Maintainability', value: `${overall}/100`, color: overall >= 80 ? 'text-emerald-400' : overall >= 60 ? 'text-yellow-400' : 'text-red-400', icon: CheckCircle },
-                { label: 'Files Analyzed',          value: MOCK_FILES.length, color: 'text-brand-400',   icon: Code2          },
-                { label: 'High-Risk Files',         value: highRisk,          color: 'text-red-400',     icon: AlertTriangle  },
-                { label: 'Avg Complexity',          value: (MOCK_FILES.reduce((s,f)=>s+f.complexity,0)/MOCK_FILES.length).toFixed(1), color: 'text-yellow-400', icon: Zap },
+                { label: 'Overall Maintainability', value: `${s.overall_maintainability}/100`, color: s.overall_maintainability >= 80 ? 'text-emerald-400' : s.overall_maintainability >= 60 ? 'text-yellow-400' : 'text-red-400', icon: CheckCircle },
+                { label: 'Files Analyzed',          value: s.files_analyzed,                  color: 'text-brand-400',  icon: Code2         },
+                { label: 'High-Risk Files',         value: s.high_risk_files,                  color: 'text-red-400',    icon: AlertTriangle },
+                { label: 'Avg Complexity',          value: s.avg_complexity,                   color: 'text-yellow-400', icon: Zap           },
               ].map(({ label, value, color, icon: Icon }) => (
                 <motion.div key={label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                   className="glass-card gradient-border"
@@ -140,37 +167,48 @@ export default function CodeComplexity() {
               ))}
             </div>
 
-            {/* Chart + radar row */}
+            {/* Charts row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Bar chart */}
               <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
                 className="glass-card gradient-border"
               >
                 <h3 className="font-semibold text-white mb-4 flex items-center gap-2"><Code2 size={15} className="text-cyan-400" /> Complexity by File</h3>
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={MOCK_FILES.map((f) => ({ name: f.path.split('/').pop().replace(/\.[^.]+$/, ''), v: f.complexity, fill: f.risk === 'high' ? '#ef4444' : f.risk === 'medium' ? '#f59e0b' : '#10b981' }))} barSize={18}>
+                  <BarChart barSize={14}
+                    data={[...files].sort((a,b) => b.complexity - a.complexity).slice(0,12).map((f) => ({
+                      name: f.path.split('/').pop().replace(/\.[^.]+$/, ''),
+                      v:    f.complexity,
+                      fill: f.risk === 'high' ? '#ef4444' : f.risk === 'medium' ? '#f59e0b' : '#10b981',
+                    }))}
+                  >
                     <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} angle={-20} textAnchor="end" height={40} />
                     <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} width={24} />
-                    <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, fontSize: 12 }} formatter={(v) => [v, 'Cyclomatic Complexity']} />
-                    <Bar dataKey="v" radius={[4, 4, 0, 0]} name="Complexity">
-                      {MOCK_FILES.map((f, i) => (
-                        <rect key={i} fill={f.risk === 'high' ? '#ef4444' : f.risk === 'medium' ? '#f59e0b' : '#10b981'} />
+                    <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, fontSize: 12 }}
+                      formatter={(v) => [v, 'Cyclomatic Complexity']} />
+                    <Bar dataKey="v" radius={[4,4,0,0]} name="Complexity">
+                      {[...files].sort((a,b) => b.complexity - a.complexity).slice(0,12).map((f, i) => (
+                        <Cell key={i} fill={f.risk === 'high' ? '#ef4444' : f.risk === 'medium' ? '#f59e0b' : '#10b981'} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
                 <div className="flex gap-4 mt-2 justify-center text-xs">
                   {[['#10b981','Low'],['#f59e0b','Medium'],['#ef4444','High']].map(([c,l]) => (
-                    <span key={l} className="flex items-center gap-1 text-dark-400"><span className="w-2 h-2 rounded-full inline-block" style={{background:c}}/>{l} Risk</span>
+                    <span key={l} className="flex items-center gap-1 text-dark-400">
+                      <span className="w-2 h-2 rounded-full inline-block" style={{ background: c }} />{l} Risk
+                    </span>
                   ))}
                 </div>
               </motion.div>
 
+              {/* Radar */}
               <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
                 className="glass-card gradient-border"
               >
                 <h3 className="font-semibold text-white mb-2 flex items-center gap-2"><Zap size={15} className="text-yellow-400" /> Code Quality Radar</h3>
                 <ResponsiveContainer width="100%" height={210}>
-                  <RadarChart data={RADAR_DATA}>
+                  <RadarChart data={data.radar}>
                     <PolarGrid stroke="rgba(255,255,255,0.05)" />
                     <PolarAngleAxis dataKey="dim" tick={{ fill: '#64748b', fontSize: 10 }} />
                     <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, fontSize: 12 }} />
@@ -180,37 +218,42 @@ export default function CodeComplexity() {
               </motion.div>
             </div>
 
-            {/* Lang breakdown */}
-            <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-              className="glass-card gradient-border"
-            >
-              <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><Code2 size={15} className="text-purple-400" /> By Language</h3>
-              <div className="flex flex-wrap gap-3">
-                {LANG_COMPLEXITY.map((l) => (
-                  <div key={l.lang} className="flex items-center gap-3 glass rounded-xl px-4 py-3 border border-white/5">
-                    <TechLogo name={l.lang} size={22} />
-                    <div>
-                      <p className="text-sm font-semibold text-white">{l.lang}</p>
-                      <p className="text-[10px] text-dark-400">{l.files} files · avg complexity {l.avg}</p>
+            {/* By language */}
+            {data.by_lang?.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                className="glass-card gradient-border"
+              >
+                <h3 className="font-semibold text-white mb-3 flex items-center gap-2"><Code2 size={15} className="text-purple-400" /> By Language</h3>
+                <div className="flex flex-wrap gap-3">
+                  {data.by_lang.map((l) => (
+                    <div key={l.lang} className="flex items-center gap-3 glass rounded-xl px-4 py-3 border border-white/5">
+                      <TechLogo name={l.lang} size={22} />
+                      <div>
+                        <p className="text-sm font-semibold text-white">{l.lang}</p>
+                        <p className="text-[10px] text-dark-400">{l.files} file{l.files !== 1 ? 's' : ''} · avg complexity {l.avg}</p>
+                      </div>
+                      <div className={`ml-4 text-sm font-black ${l.avg < 15 ? 'text-emerald-400' : l.avg < 25 ? 'text-yellow-400' : 'text-red-400'}`}>{l.avg}</div>
                     </div>
-                    <div className={`ml-4 text-sm font-black ${l.avg < 15 ? 'text-emerald-400' : 'text-yellow-400'}`}>{l.avg}</div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
             {/* File table */}
             <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
               className="glass-card gradient-border"
             >
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <h3 className="font-semibold text-white flex items-center gap-2"><AlertTriangle size={15} className="text-yellow-400" /> File-Level Analysis</h3>
+                <h3 className="font-semibold text-white flex items-center gap-2">
+                  <AlertTriangle size={15} className="text-yellow-400" /> File-Level Analysis
+                  <span className="text-xs text-dark-500 font-normal">({files.length} files)</span>
+                </h3>
                 <div className="flex gap-1.5">
-                  {['complexity','maintainability','cognitive'].map((s) => (
-                    <button key={s} onClick={() => setSortBy(s)}
-                      className={`text-[10px] px-2.5 py-1 rounded-lg border font-medium capitalize transition-all ${sortBy === s ? 'bg-brand-500/15 border-brand-500/30 text-brand-300' : 'glass border-white/8 text-dark-400 hover:text-white'}`}
+                  {['complexity','maintainability','cognitive'].map((k) => (
+                    <button key={k} onClick={() => setSortBy(k)}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border font-medium capitalize transition-all ${sortBy === k ? 'bg-brand-500/15 border-brand-500/30 text-brand-300' : 'glass border-white/8 text-dark-400 hover:text-white'}`}
                     >
-                      {s}
+                      {k}
                     </button>
                   ))}
                 </div>
@@ -218,10 +261,10 @@ export default function CodeComplexity() {
 
               <div className="space-y-2">
                 {sorted.map((f, i) => {
-                  const rc = RISK_CONFIG[f.risk]
+                  const rc    = RISK_CONFIG[f.risk]
                   const isOpen = expanded === f.path
                   return (
-                    <motion.div key={f.path} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
+                    <motion.div key={f.path} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }}
                       className="glass rounded-xl border border-white/5 overflow-hidden"
                     >
                       <button className="w-full flex items-center gap-3 p-3 text-left hover:bg-white/2 transition-all"
@@ -230,7 +273,7 @@ export default function CodeComplexity() {
                         <TechLogo name={f.lang} size={18} />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-mono text-white truncate">{f.path}</p>
-                          <p className="text-[10px] text-dark-500">{f.loc} LOC</p>
+                          <p className="text-[10px] text-dark-500">{f.loc.toLocaleString()} LOC</p>
                         </div>
                         <div className="hidden md:flex items-center gap-4 shrink-0">
                           <div className="text-center">
@@ -250,38 +293,42 @@ export default function CodeComplexity() {
                         {isOpen ? <ChevronDown size={12} className="text-dark-400 shrink-0" /> : <ChevronRight size={12} className="text-dark-400 shrink-0" />}
                       </button>
 
-                      {isOpen && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-                          className="border-t border-white/5 px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3"
-                        >
-                          {[
-                            { label: 'Lines of Code',     value: f.loc        },
-                            { label: 'Cyclomatic Cmplx',  value: f.complexity },
-                            { label: 'Maintainability',   value: `${f.maintainability}/100` },
-                            { label: 'Cognitive Cmplx',   value: f.cognitive  },
-                            { label: 'Code Duplication',  value: `${f.duplication}%` },
-                          ].map(({ label, value }) => (
-                            <div key={label} className="text-center bg-white/3 rounded-lg py-2 px-3">
-                              <p className="text-sm font-black text-white">{value}</p>
-                              <p className="text-[9px] text-dark-500 mt-0.5">{label}</p>
+                      <AnimatePresence>
+                        {isOpen && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }} className="overflow-hidden"
+                          >
+                            <div className="border-t border-white/5 px-4 py-3 grid grid-cols-2 md:grid-cols-5 gap-3">
+                              {[
+                                { label: 'Lines of Code',    value: f.loc.toLocaleString() },
+                                { label: 'Cyclomatic Cmplx', value: f.complexity },
+                                { label: 'Maintainability',  value: `${f.maintainability}/100` },
+                                { label: 'Cognitive Cmplx',  value: f.cognitive },
+                                { label: 'Duplication',      value: `${f.duplication}%` },
+                              ].map(({ label, value }) => (
+                                <div key={label} className="text-center bg-white/3 rounded-lg py-2 px-3">
+                                  <p className="text-sm font-black text-white">{value}</p>
+                                  <p className="text-[9px] text-dark-500 mt-0.5">{label}</p>
+                                </div>
+                              ))}
+                              {f.risk === 'high' && (
+                                <div className="col-span-2 md:col-span-5 flex items-start gap-2 text-xs text-yellow-300 bg-yellow-500/8 rounded-lg p-2.5 border border-yellow-500/15">
+                                  <Info size={12} className="shrink-0 mt-0.5" />
+                                  Refactor recommended: cyclomatic complexity &gt;20 increases bug probability by 3×. Consider splitting into smaller functions.
+                                </div>
+                              )}
                             </div>
-                          ))}
-                          {f.risk === 'high' && (
-                            <div className="col-span-2 md:col-span-4 flex items-start gap-2 text-xs text-yellow-300 bg-yellow-500/8 rounded-lg p-2.5 border border-yellow-500/15">
-                              <Info size={12} className="shrink-0 mt-0.5" />
-                              <span>Refactor recommended: cyclomatic complexity &gt;20 increases bug probability by 3×. Consider splitting into smaller functions.</span>
-                            </div>
-                          )}
-                        </motion.div>
-                      )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </motion.div>
                   )
                 })}
               </div>
             </motion.div>
           </motion.div>
-        </AnimatePresence>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   )
 }

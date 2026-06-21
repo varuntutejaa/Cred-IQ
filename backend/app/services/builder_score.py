@@ -26,31 +26,34 @@ DOMAIN_KEYWORDS = {
 URL_PATTERN = re.compile(r'https?://[^\s"]+')
 
 
-def compute_builder_score(username: str) -> dict:
-    try:
-        g    = _client()
-        user = g.get_user(username)
-    except GithubException as e:
-        return {'error': str(e)}
-
-    repos = [r for r in user.get_repos() if not r.private]
+def compute_builder_score(username: str, repos=None) -> dict:
+    """Pass repos list to skip a redundant API call."""
+    if repos is None:
+        try:
+            g    = _client()
+            user = g.get_user(username)
+        except GithubException as e:
+            return {'error': str(e)}
+        repos = [r for r in user.get_repos() if not r.private]
 
     # -- Deployment Signal (35) --
     deployed = 0
     for r in repos:
-        text = f"{r.description or ''} {r.homepage or ''} {' '.join(r.topics)}"
+        topics = r.topics if hasattr(r, 'topics') else []
+        text   = f"{r.description or ''} {r.homepage or ''} {' '.join(topics)}"
         if URL_PATTERN.search(text) or r.homepage:
             deployed += 1
     deploy_score = min(deployed / max(len(repos) * 0.3, 1) * 35, 35)
 
-    # -- Code Volume (25) — repo sizes in KB --
-    total_kb   = sum(r.size for r in repos)
-    vol_score  = min(total_kb / 50000 * 25, 25)
+    # -- Code Volume (25) --
+    total_kb  = sum(r.size for r in repos)
+    vol_score = min(total_kb / 50000 * 25, 25)
 
     # -- Project Diversity (20) --
     domains_hit = set()
     for r in repos:
-        text = f"{r.name} {r.description or ''} {r.language or ''} {' '.join(r.topics)}".lower()
+        topics = r.topics if hasattr(r, 'topics') else []
+        text = f"{r.name} {r.description or ''} {r.language or ''} {' '.join(topics)}".lower()
         for domain, keywords in DOMAIN_KEYWORDS.items():
             if any(k in text for k in keywords):
                 domains_hit.add(domain)
@@ -73,9 +76,9 @@ def compute_builder_score(username: str) -> dict:
             'recency':           round(recency_score),
         },
         'signals': {
-            'deployed_repos':   deployed,
-            'total_repos':      len(repos),
-            'domains_covered':  list(domains_hit),
-            'recently_active':  recent,
+            'deployed_repos':  deployed,
+            'total_repos':     len(repos),
+            'domains_covered': list(domains_hit),
+            'recently_active': recent,
         },
     }

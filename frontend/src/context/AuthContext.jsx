@@ -8,7 +8,7 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import axios from 'axios'
-import { auth, googleProvider, githubProvider } from '../firebase'
+import { auth, googleProvider, githubProvider, FIREBASE_CONFIGURED } from '../firebase'
 
 const AuthContext = createContext(null)
 
@@ -38,12 +38,25 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!FIREBASE_CONFIGURED || !auth) {
+      // Firebase not set up — restore demo session from localStorage
+      const stored = localStorage.getItem('ciq_demo_user')
+      const token  = localStorage.getItem('ciq_demo_token')
+      if (stored && token) {
+        try {
+          setUser(JSON.parse(stored))
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+        } catch {}
+      }
+      setLoading(false)
+      return
+    }
+
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
           const { profile } = await syncToBackend(firebaseUser)
           setUser(profile)
-          // refresh token every 55 minutes
           setInterval(() => refreshToken(firebaseUser), 55 * 60 * 1000)
         } catch {
           setUser(null)
@@ -97,8 +110,10 @@ export function AuthProvider({ children }) {
   }
 
   const logout = async () => {
-    await signOut(auth)
+    if (FIREBASE_CONFIGURED && auth) await signOut(auth)
     setUser(null)
+    localStorage.removeItem('ciq_demo_user')
+    localStorage.removeItem('ciq_demo_token')
     delete axios.defaults.headers.common['Authorization']
   }
 
@@ -109,6 +124,8 @@ export function AuthProvider({ children }) {
     const { data } = await axios.post('/api/auth/demo', { github_username: githubUsername, role })
     axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
     setUser(data.user)
+    localStorage.setItem('ciq_demo_user',  JSON.stringify(data.user))
+    localStorage.setItem('ciq_demo_token', data.token)
     return data.user
   }
 

@@ -38,12 +38,12 @@ def create_user(db, name: str, email: str, password: str, role: str) -> dict:
     return _serialize(doc)
 
 
-def find_user_by_email(db, email: str) -> dict | None:
+def find_user_by_email(db, email: str) -> "Optional[dict]":
     doc = db.users.find_one({'email': email})
     return _serialize(doc) if doc else None
 
 
-def find_user_by_id(db, user_id: str) -> dict | None:
+def find_user_by_id(db, user_id: str) -> "Optional[dict]":
     try:
         doc = db.users.find_one({'_id': ObjectId(user_id)})
         return _serialize(doc) if doc else None
@@ -51,7 +51,7 @@ def find_user_by_id(db, user_id: str) -> dict | None:
         return None
 
 
-def update_user(db, user_id: str, updates: dict) -> dict | None:
+def update_user(db, user_id: str, updates: dict) -> "Optional[dict]":
     updates['updated_at'] = datetime.now(timezone.utc)
     db.users.update_one({'_id': ObjectId(user_id)}, {'$set': updates})
     return find_user_by_id(db, user_id)

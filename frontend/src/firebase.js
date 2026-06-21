@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app'
+import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, GoogleAuthProvider, GithubAuthProvider } from 'firebase/auth'
 
 const firebaseConfig = {
@@ -8,13 +8,25 @@ const firebaseConfig = {
   storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId:     import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 }
 
-const app = initializeApp(firebaseConfig)
+const FIREBASE_CONFIGURED = !!import.meta.env.VITE_FIREBASE_API_KEY
 
-export const auth           = getAuth(app)
-export const googleProvider = new GoogleAuthProvider()
-export const githubProvider = new GithubAuthProvider()
+let auth, googleProvider, githubProvider
 
-githubProvider.addScope('read:user')
-githubProvider.addScope('public_repo')
+if (FIREBASE_CONFIGURED) {
+  const app   = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
+  auth           = getAuth(app)
+  googleProvider = new GoogleAuthProvider()
+  githubProvider = new GithubAuthProvider()
+  githubProvider.addScope('read:user')
+  githubProvider.addScope('public_repo')
+} else {
+  // Stub — demo/email mode only until Firebase is configured
+  auth           = null
+  googleProvider = null
+  githubProvider = null
+}
+
+export { auth, googleProvider, githubProvider, FIREBASE_CONFIGURED }

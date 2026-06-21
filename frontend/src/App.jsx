@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { RecruiterProvider } from './context/RecruiterContext'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -35,7 +36,7 @@ export default function App() {
         <Route path="/login"      element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register"   element={<PublicRoute><Register /></PublicRoute>} />
         <Route path="/dashboard/*"element={<PrivateRoute requireRole="developer"><Dashboard /></PrivateRoute>} />
-        <Route path="/recruiter/*"element={<PrivateRoute requireRole="recruiter"><RecruiterDashboard /></PrivateRoute>} />
+        <Route path="/recruiter/*"element={<PrivateRoute requireRole="recruiter"><RecruiterProvider><RecruiterDashboard /></RecruiterProvider></PrivateRoute>} />
         <Route path="*"           element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
