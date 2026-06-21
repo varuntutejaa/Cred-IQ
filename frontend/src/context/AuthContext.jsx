@@ -98,12 +98,17 @@ export function AuthProvider({ children }) {
   // GitHub OAuth
   const loginWithGitHub = async (role = 'developer') => {
     const cred = await signInWithPopup(auth, githubProvider)
-    // GitHub access token for our GitHub analysis service
-    const githubToken = cred._tokenResponse?.oauthAccessToken
+    const githubToken    = cred._tokenResponse?.oauthAccessToken
+    // Try multiple ways to get the GitHub username
+    const githubUsername =
+      cred.user.reloadUserInfo?.screenName ||
+      cred._tokenResponse?.screenName ||
+      cred.user.providerData?.find(p => p.providerId === 'github.com')?.uid ||
+      null
     const { profile } = await syncToBackend(cred.user, {
       role,
-      github_username:       cred.user.reloadUserInfo?.screenName || null,
-      github_access_token:   githubToken || null,
+      github_username:     githubUsername,
+      github_access_token: githubToken || null,
     })
     setUser(profile)
     return profile

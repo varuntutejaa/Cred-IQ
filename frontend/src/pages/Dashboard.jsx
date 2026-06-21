@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Github, ArrowRight, X, Loader2 } from 'lucide-react'
@@ -24,7 +24,7 @@ import toast from 'react-hot-toast'
 
 function GitHubPromptModal({ onClose }) {
   const { user, updateUser } = useAuth()
-  const [input,   setInput]   = useState(user?.github_username || '')
+  const [input,   setInput]   = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
@@ -33,17 +33,15 @@ function GitHubPromptModal({ onClose }) {
     if (!username) { toast.error('Enter a GitHub username'); return }
     setLoading(true)
     try {
-      // fetch real GitHub data and update the user profile
       const { data } = await axios.post('/api/auth/demo', {
         github_username: username,
         role: user?.role || 'developer',
       })
-      // update auth header + user context with the enriched profile
       axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
       updateUser(data.user)
       localStorage.setItem('ciq_demo_user',  JSON.stringify(data.user))
       localStorage.setItem('ciq_demo_token', data.token)
-      toast.success(`GitHub profile connected!`)
+      toast.success('GitHub profile connected!')
       onClose()
     } catch (err) {
       toast.error(err?.response?.data?.message || 'GitHub user not found')
@@ -68,7 +66,7 @@ function GitHubPromptModal({ onClose }) {
           </div>
           <h2 className="text-lg font-bold text-white">Connect your GitHub</h2>
           <p className="text-sm text-dark-400 mt-1">
-            Enter your GitHub username to load your real repos, trust score, and activity — the whole dashboard unlocks.
+            Enter your GitHub username to load your real repos, trust score, and activity.
           </p>
         </div>
 
@@ -100,16 +98,44 @@ function GitHubPromptModal({ onClose }) {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth()
-  const [collapsed, setCollapsed] = useState(false)
+  const { user, updateUser } = useAuth()
+  const [collapsed,   setCollapsed]   = useState(false)
 
-  // Show GitHub prompt if user logged in via Google/Email but has no GitHub data yet
-  const needsGitHub = !user?.github_username || !user?.trust_score
-  const [showPrompt, setShowPrompt] = useState(needsGitHub)
+  // Only show prompt if no github_username at all (Google/Email users)
+  // GitHub OAuth users already have github_username set — skip the modal
+  const [showPrompt, setShowPrompt] = useState(!user?.github_username)
+
+  // Auto-enrich GitHub OAuth users who have username but no trust score yet
+  useEffect(() => {
+    if (!user?.github_username || user?.trust_score) return
+    Promise.all([
+      axios.get(`/api/github/analyze/${user.github_username}`),
+      axios.get(`/api/recruiter/quick-verify/${user.github_username}`),
+    ]).then(([{ data: p }, { data: v }]) => {
+      updateUser({
+        trust_score:    v.trust_score?.total   ?? null,
+        builder_score:  v.builder_score?.total ?? null,
+        languages:      p.languages   || [],
+        top_repos:      p.top_repos   || [],
+        public_repos:   p.public_repos  || 0,
+        total_stars:    p.total_stars   || 0,
+        total_forks:    p.total_forks   || 0,
+        followers:      p.followers     || 0,
+        following:      p.following     || 0,
+        commit_count:   p.commit_count  || 0,
+        account_age_days:   p.account_age_days   || 0,
+        account_created_at: p.account_created_at || null,
+        bio:      p.bio      || user?.bio      || '',
+        location: p.location || user?.location || '',
+        avatar:   p.avatar   || user?.avatar,
+        trust_breakdown:   v.trust_score?.dimensions   || {},
+        builder_breakdown: v.builder_score?.dimensions || {},
+      })
+    }).catch(() => {})
+  }, [user?.github_username])
 
   return (
     <div className="min-h-screen flex" style={{ background: '#020617' }}>
-      {/* ambient glow */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/4 w-[600px] h-[400px] bg-brand-500/[0.04] rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-[500px] h-[300px] bg-purple-500/[0.03] rounded-full blur-3xl" />
