@@ -1,10 +1,10 @@
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect, useRef } from 'react'
 import {
   Shield, TrendingUp, CheckCircle, AlertTriangle,
   Rocket, Code2, ArrowUpRight, Zap, Star, GitCommit,
   GitBranch, Users, GitFork, Award, ExternalLink, Search, Loader2,
-  MapPin, Calendar
+  MapPin, Calendar, Brain, ChevronRight, RefreshCw, Sparkles,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -54,6 +54,230 @@ function ScoreRing({ value, label, color = '#6366f1' }) {
 
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } }
 const fadeUp  = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } }
+
+const TRUST_DIMS   = ['github_depth', 'skill_evidence', 'project_quality', 'consistency', 'community']
+const BUILDER_DIMS = ['deployment_signal', 'code_volume', 'project_diversity', 'recency']
+const TRUST_MAX    = { github_depth: 30, skill_evidence: 25, project_quality: 20, consistency: 15, community: 10 }
+const BUILDER_MAX  = { deployment_signal: 35, code_volume: 25, project_diversity: 20, recency: 20 }
+const DIM_LABEL    = {
+  github_depth: 'GitHub Depth', skill_evidence: 'Skill Evidence', project_quality: 'Project Quality',
+  consistency: 'Consistency', community: 'Community',
+  deployment_signal: 'Deployment Signal', code_volume: 'Code Volume',
+  project_diversity: 'Project Diversity', recency: 'Recency',
+}
+const DIM_COLOR = {
+  github_depth: '#6366f1', skill_evidence: '#10b981', project_quality: '#f59e0b',
+  consistency: '#06b6d4', community: '#8b5cf6',
+  deployment_signal: '#f59e0b', code_volume: '#10b981',
+  project_diversity: '#6366f1', recency: '#06b6d4',
+}
+
+function DimBar({ dim, score, max, reason }) {
+  const pct = max ? Math.round((score / max) * 100) : 0
+  const col = DIM_COLOR[dim] || '#6366f1'
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-dark-200">{DIM_LABEL[dim]}</span>
+        <span className="font-bold text-white">{score}<span className="text-dark-600">/{max}</span></span>
+      </div>
+      <div className="h-1.5 bg-dark-800 rounded-full overflow-hidden">
+        <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+          className="h-full rounded-full"
+          style={{ background: col }}
+        />
+      </div>
+      {reason && <p className="text-[10px] text-dark-500 leading-relaxed">{reason}</p>}
+    </div>
+  )
+}
+
+function ScoreAnalysisCard({ username }) {
+  const [state,    setState]    = useState('idle')   // idle | loading | done | error
+  const [data,     setData]     = useState(null)
+  const [errMsg,   setErrMsg]   = useState('')
+  const [tab,      setTab]      = useState('trust')
+
+  const load = async () => {
+    if (!username) return
+    setState('loading')
+    setData(null)
+    try {
+      const { data: res } = await axios.get(`/api/insights/score-analysis/${username}`)
+      setData(res)
+      setState('done')
+    } catch (e) {
+      setErrMsg(e?.response?.data?.error || 'AI analysis failed')
+      setState('error')
+    }
+  }
+
+  const analysis  = data?.analysis || {}
+  const tDims     = data?.trust_dims   || {}
+  const bDims     = data?.builder_dims || {}
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+      className="glass-card gradient-border"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="card-title mb-0.5">
+            <Brain size={15} className="text-brand-400" /> AI Score Analysis
+          </h3>
+          <p className="text-[11px] text-dark-500">
+            {state === 'done'
+              ? `Trust ${data.trust_score}/100 · Builder ${data.builder_score}/100 — AI dimension breakdown`
+              : 'Get AI reasoning behind every dimension of your Trust & Builder scores'}
+          </p>
+        </div>
+        {state === 'idle' && (
+          <button onClick={load} disabled={!username}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl bg-brand-500/15 border border-brand-500/25 text-brand-300 hover:bg-brand-500/25 transition-all disabled:opacity-40 shrink-0"
+          >
+            <Sparkles size={12} /> Analyse Scores
+          </button>
+        )}
+        {state === 'done' && (
+          <button onClick={load}
+            className="p-1.5 rounded-lg hover:bg-white/5 text-dark-500 hover:text-white transition-all shrink-0"
+          >
+            <RefreshCw size={13} />
+          </button>
+        )}
+      </div>
+
+      {/* Idle placeholder */}
+      {state === 'idle' && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {['Why is my Trust Score X?', 'What's limiting my Builder Score?', 'Which dimension to improve first?', 'Specific tips for each score'].map(q => (
+            <div key={q} className="p-3 rounded-xl bg-white/[0.025] border border-white/[0.05] flex items-start gap-2">
+              <ChevronRight size={11} className="text-brand-500 mt-0.5 shrink-0" />
+              <p className="text-[10px] text-dark-400 leading-relaxed">{q}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Loading */}
+      {state === 'loading' && (
+        <div className="flex items-center gap-3 py-4">
+          <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center shrink-0">
+            <Brain size={14} className="text-brand-400 animate-pulse" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">Groq AI is analysing your scores…</p>
+            <p className="text-xs text-dark-500 mt-0.5">Reading dimensions, reasoning through your data, writing explanations</p>
+          </div>
+          <div className="ml-auto w-5 h-5 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin shrink-0" />
+        </div>
+      )}
+
+      {/* Error */}
+      {state === 'error' && (
+        <div className="flex items-center gap-3 py-3">
+          <AlertTriangle size={16} className="text-red-400 shrink-0" />
+          <p className="text-sm text-dark-300">{errMsg}</p>
+          <button onClick={load} className="ml-auto text-xs text-brand-400 hover:text-brand-300 transition-colors shrink-0">Retry</button>
+        </div>
+      )}
+
+      {/* Results */}
+      {state === 'done' && analysis && (
+        <div className="space-y-4">
+          {/* Overall */}
+          <div className="p-3.5 rounded-xl bg-brand-500/5 border border-brand-500/15">
+            <p className="text-xs text-dark-200 leading-relaxed">{analysis.overall}</p>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 p-1 glass rounded-xl">
+            {[
+              { key: 'trust',   label: `Trust Score — ${data.trust_score}/100`   },
+              { key: 'builder', label: `Builder Score — ${data.builder_score}/100` },
+            ].map(({ key, label }) => (
+              <button key={key} onClick={() => setTab(key)}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  tab === key ? 'bg-brand-500 text-white shadow-glow-sm' : 'text-dark-400 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <AnimatePresence mode="wait">
+            {tab === 'trust' && (
+              <motion.div key="trust" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
+                className="space-y-4"
+              >
+                {analysis.trust_summary && (
+                  <p className="text-xs text-dark-300 leading-relaxed italic">{analysis.trust_summary}</p>
+                )}
+                <div className="space-y-4">
+                  {TRUST_DIMS.map(dim => (
+                    <DimBar key={dim} dim={dim} score={tDims[dim] ?? 0} max={TRUST_MAX[dim]}
+                      reason={analysis.trust_dimensions?.[dim]}
+                    />
+                  ))}
+                </div>
+                {analysis.trust_improvements?.length > 0 && (
+                  <div className="pt-2 border-t border-white/5">
+                    <p className="text-[11px] font-semibold text-dark-400 mb-2 flex items-center gap-1.5">
+                      <Zap size={11} className="text-yellow-400" /> How to improve your Trust Score
+                    </p>
+                    <div className="space-y-1.5">
+                      {analysis.trust_improvements.map((tip, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs text-dark-300">
+                          <span className="text-yellow-400 font-bold shrink-0 mt-0.5">{i + 1}.</span>
+                          {tip}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {tab === 'builder' && (
+              <motion.div key="builder" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}
+                className="space-y-4"
+              >
+                {analysis.builder_summary && (
+                  <p className="text-xs text-dark-300 leading-relaxed italic">{analysis.builder_summary}</p>
+                )}
+                <div className="space-y-4">
+                  {BUILDER_DIMS.map(dim => (
+                    <DimBar key={dim} dim={dim} score={bDims[dim] ?? 0} max={BUILDER_MAX[dim]}
+                      reason={analysis.builder_dimensions?.[dim]}
+                    />
+                  ))}
+                </div>
+                {analysis.builder_improvements?.length > 0 && (
+                  <div className="pt-2 border-t border-white/5">
+                    <p className="text-[11px] font-semibold text-dark-400 mb-2 flex items-center gap-1.5">
+                      <Zap size={11} className="text-yellow-400" /> How to improve your Builder Score
+                    </p>
+                    <div className="space-y-1.5">
+                      {analysis.builder_improvements.map((tip, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs text-dark-300">
+                          <span className="text-yellow-400 font-bold shrink-0 mt-0.5">{i + 1}.</span>
+                          {tip}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+    </motion.div>
+  )
+}
 
 export default function DashboardHome() {
   const { user } = useAuth()
@@ -210,6 +434,11 @@ export default function DashboardHome() {
           )
         })}
       </motion.div>
+
+      {/* ── AI Score Analysis ── */}
+      {user?.github_username && (
+        <ScoreAnalysisCard username={user.github_username} />
+      )}
 
       {/* ── Monthly Commits + Languages ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

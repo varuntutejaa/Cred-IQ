@@ -89,6 +89,77 @@ def _cache_set(username: str, kind: str, payload: dict):
 
 # ─── Public API ────────────────────────────────────────────────────────────────
 
+def analyze_score_breakdown(username: str, trust: dict, builder: dict, github_data: dict) -> dict:
+    """AI explains every dimension of Trust + Builder scores with specific reasoning and tips."""
+    cached = _cache_get(username, 'score_breakdown_v1')
+    if cached:
+        return cached
+
+    td  = trust.get('dimensions', {})
+    bd  = builder.get('dimensions', {})
+    raw = trust.get('raw', {})
+
+    langs = ', '.join(l['name'] for l in github_data.get('languages', [])[:6]) or 'unknown'
+    repos = github_data.get('public_repos', raw.get('public_repos', 0))
+    commits = github_data.get('commit_count', raw.get('commit_count', 0))
+    stars   = github_data.get('total_stars', raw.get('total_stars', 0))
+    forks   = github_data.get('total_forks', raw.get('total_forks', 0))
+    followers = github_data.get('followers', raw.get('followers', 0))
+    age_days  = github_data.get('account_age_days', raw.get('account_age_days', 0))
+    age_yrs   = round(age_days / 365, 1)
+
+    prompt = f"""You are a developer career coach. Analyse this developer's CredIQ scores and explain every dimension with specific reasoning based on their actual data.
+
+DEVELOPER: @{username}
+Raw signals: {age_yrs}yr account | {repos} repos | {commits} commits/yr | {stars} stars | {forks} forks | {followers} followers | Languages: {langs}
+
+TRUST SCORE: {trust.get('total', '?')}/100
+  github_depth:    {td.get('github_depth', '?')}/30
+  skill_evidence:  {td.get('skill_evidence', '?')}/25
+  project_quality: {td.get('project_quality', '?')}/20
+  consistency:     {td.get('consistency', '?')}/15
+  community:       {td.get('community', '?')}/10
+
+BUILDER SCORE: {builder.get('total', '?')}/100
+  deployment_signal: {bd.get('deployment_signal', '?')}/35
+  code_volume:       {bd.get('code_volume', '?')}/25
+  project_diversity: {bd.get('project_diversity', '?')}/20
+  recency:           {bd.get('recency', '?')}/20
+
+ALL fields are required. Return ONLY JSON, no markdown:
+{{
+  "overall": "<2 sentences: honest assessment of both scores combined and what they say about this developer>",
+  "trust_summary": "<1-2 sentences: what the trust score reflects about their GitHub presence>",
+  "builder_summary": "<1-2 sentences: what the builder score reflects about their shipping ability>",
+  "trust_dimensions": {{
+    "github_depth":    "<specific reason this dimension scored {td.get('github_depth','?')}/30 — reference actual numbers>",
+    "skill_evidence":  "<specific reason this dimension scored {td.get('skill_evidence','?')}/25>",
+    "project_quality": "<specific reason this dimension scored {td.get('project_quality','?')}/20>",
+    "consistency":     "<specific reason this dimension scored {td.get('consistency','?')}/15>",
+    "community":       "<specific reason this dimension scored {td.get('community','?')}/10>"
+  }},
+  "builder_dimensions": {{
+    "deployment_signal": "<specific reason this scored {bd.get('deployment_signal','?')}/35>",
+    "code_volume":       "<specific reason this scored {bd.get('code_volume','?')}/25>",
+    "project_diversity": "<specific reason this scored {bd.get('project_diversity','?')}/20>",
+    "recency":           "<specific reason this scored {bd.get('recency','?')}/20>"
+  }},
+  "trust_improvements":   ["<specific action to raise trust score>", "<action 2>", "<action 3>"],
+  "builder_improvements": ["<specific action to raise builder score>", "<action 2>", "<action 3>"]
+}}"""
+
+    raw_resp = _generate(prompt)
+    import sys
+    print(f'[score_breakdown for {username}]: {raw_resp[:300]}', file=sys.stderr)
+    try:
+        result = _parse_json(raw_resp)
+    except Exception as e:
+        raise ValueError(f'Score breakdown parse error: {e}\n{raw_resp[:400]}')
+
+    _cache_set(username, 'score_breakdown_v1', result)
+    return result
+
+
 def analyze_certificate_skills(name: str, issuer: str, date: str) -> dict:
     """AI analysis of skills learned, career value, and insights from a certificate."""
     cache_key = f'{name.lower().replace(" ", "_")}__{issuer.lower().replace(" ", "_")}'
