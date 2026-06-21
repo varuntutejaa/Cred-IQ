@@ -36,9 +36,9 @@ def create_app():
 
     @app.get('/api/health')
     def health():
-        from .db import get_db
         try:
-            get_db().command('ping')
+            from .db import get_db
+            get_db().collection('_health').document('ping').get()
             db_status = 'connected'
         except Exception:
             db_status = 'disconnected'

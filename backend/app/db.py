@@ -1,17 +1,10 @@
-from pymongo import MongoClient
-from pymongo.database import Database
-import os
+import firebase_admin
+from firebase_admin import firestore
 
-_client: "Optional[MongoClient]" = None
+_db = None
 
-def get_db() -> Database:
-    global _client
-    if _client is None:
-        _client = MongoClient(os.getenv('MONGO_URI', 'mongodb://localhost:27017/crediq'))
-    return _client.get_default_database()
-
-def close_db():
-    global _client
-    if _client:
-        _client.close()
-        _client = None
+def get_db():
+    global _db
+    if _db is None:
+        _db = firestore.client()
+    return _db

@@ -60,10 +60,15 @@ def _cache_get(username: str, kind: str):
     try:
         from ..db import get_db
         cutoff = datetime.now(timezone.utc) - timedelta(hours=CACHE_TTL_HOURS)
-        doc = get_db()['ai_cache'].find_one(
-            {'username': username, 'kind': kind, 'cached_at': {'$gt': cutoff}}
-        )
-        return doc['payload'] if doc else None
+        doc_id = f'{username}__{kind}'
+        snap   = get_db().collection('ai_cache').document(doc_id).get()
+        if not snap.exists:
+            return None
+        data = snap.to_dict()
+        cached_at = data.get('cached_at')
+        if cached_at and cached_at.replace(tzinfo=timezone.utc) > cutoff:
+            return data.get('payload')
+        return None
     except Exception:
         return None
 
@@ -71,12 +76,13 @@ def _cache_get(username: str, kind: str):
 def _cache_set(username: str, kind: str, payload: dict):
     try:
         from ..db import get_db
-        get_db()['ai_cache'].replace_one(
-            {'username': username, 'kind': kind},
-            {'username': username, 'kind': kind, 'payload': payload,
-             'cached_at': datetime.now(timezone.utc)},
-            upsert=True,
-        )
+        doc_id = f'{username}__{kind}'
+        get_db().collection('ai_cache').document(doc_id).set({
+            'username':  username,
+            'kind':      kind,
+            'payload':   payload,
+            'cached_at': datetime.now(timezone.utc),
+        })
     except Exception:
         pass
 

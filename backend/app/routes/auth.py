@@ -10,18 +10,19 @@ from ..services.builder_score import compute_builder_score
 auth_bp = Blueprint('auth', __name__)
 
 
-def _upsert_user(db, uid: str, data: dict) -> dict:
-    existing = db.users.find_one({'uid': uid})
-    if existing:
+def _upsert_user(uid: str, data: dict) -> dict:
+    db  = get_db()
+    ref = db.collection('users').document(uid)
+    doc = ref.get()
+    if doc.exists:
         updates = {k: v for k, v in data.items() if v is not None and k not in ('uid', 'role')}
         if updates:
-            db.users.update_one({'uid': uid}, {'$set': updates})
-        doc = db.users.find_one({'uid': uid})
+            ref.update(updates)
+        return ref.get().to_dict()
     else:
-        doc = {'uid': uid, **data}
-        db.users.insert_one(doc)
-    doc.pop('_id', None)
-    return doc
+        payload = {'uid': uid, **data}
+        ref.set(payload)
+        return payload
 
 
 @auth_bp.post('/sync')
@@ -37,7 +38,6 @@ def sync():
 
     data = request.get_json(silent=True) or {}
     uid  = claims['uid']
-    db   = get_db()
 
     user_data = {
         'uid':                 uid,
@@ -55,19 +55,18 @@ def sync():
         'github_score':        None,
         'verified_skills':     [],
     }
-    profile = _upsert_user(db, uid, user_data)
+    profile = _upsert_user(uid, user_data)
     return jsonify({'user': profile})
 
 
 @auth_bp.get('/me')
 @firebase_required
 def me(firebase_uid, firebase_claims):
-    db   = get_db()
-    user = db.users.find_one({'uid': firebase_uid})
-    if not user:
+    ref = get_db().collection('users').document(firebase_uid)
+    doc = ref.get()
+    if not doc.exists:
         return jsonify({'message': 'User not found — call /sync first'}), 404
-    user.pop('_id', None)
-    return jsonify({'user': user})
+    return jsonify({'user': doc.to_dict()})
 
 
 @auth_bp.patch('/me')
@@ -76,11 +75,9 @@ def update_me(firebase_uid, firebase_claims):
     data    = request.get_json(silent=True) or {}
     allowed = {'name', 'bio', 'location', 'company', 'title', 'github_username', 'role'}
     updates = {k: v for k, v in data.items() if k in allowed}
-    db      = get_db()
-    db.users.update_one({'uid': firebase_uid}, {'$set': updates})
-    user = db.users.find_one({'uid': firebase_uid})
-    user.pop('_id', None)
-    return jsonify({'user': user})
+    ref = get_db().collection('users').document(firebase_uid)
+    ref.update(updates)
+    return jsonify({'user': ref.get().to_dict()})
 
 
 @auth_bp.post('/demo')
@@ -89,11 +86,10 @@ def demo():
     Demo login — takes a GitHub username, fetches real data, returns a full profile + JWT.
     No Firebase required.
     """
-    data             = request.get_json(silent=True) or {}
-    raw_input        = data.get('github_username', '').strip()
-    role             = data.get('role', 'developer')
+    data            = request.get_json(silent=True) or {}
+    raw_input       = data.get('github_username', '').strip()
+    role            = data.get('role', 'developer')
 
-    # Accept full URL or bare username
     github_username = raw_input.rstrip('/').split('/')[-1] if raw_input else ''
     if not github_username:
         return jsonify({'message': 'github_username is required'}), 400
@@ -101,7 +97,6 @@ def demo():
     if not os.getenv('GITHUB_ACCESS_TOKEN'):
         return jsonify({'message': 'GitHub token not configured. Add GITHUB_ACCESS_TOKEN to backend/.env'}), 503
 
-    # Fetch real GitHub profile
     github_data = analyze_profile(github_username)
     if 'error' in github_data:
         err = github_data['error']
@@ -109,26 +104,24 @@ def demo():
             return jsonify({'message': 'GitHub rate limit hit. Add GITHUB_ACCESS_TOKEN to backend/.env'}), 429
         return jsonify({'message': f'GitHub user not found: {err}'}), 404
 
-    # Reuse already-fetched data — no duplicate GitHub API calls
     raw_repos = github_data.pop('_raw_repos', None)
-    trust   = compute_trust_score(github_username, github_data=github_data)
-    builder = compute_builder_score(github_username, repos=raw_repos)
-
+    trust     = compute_trust_score(github_username, github_data=github_data)
+    builder   = compute_builder_score(github_username, repos=raw_repos)
     top_skills = [l['name'] for l in github_data.get('languages', [])[:5]]
 
     profile = {
-        'uid':              f'demo-{github_username}',
-        'name':             github_data.get('name') or github_username,
-        'email':            f'{github_username}@demo.crediq.dev',
-        'role':             role,
-        'avatar':           github_data.get('avatar'),
-        'github_username':  github_username,
-        'bio':              github_data.get('bio') or '',
-        'location':         github_data.get('location') or '',
-        'trust_score':      trust.get('total'),
-        'builder_score':    builder.get('total'),
-        'github_score':     min(round(github_data.get('total_stars', 0) / 10 + github_data.get('followers', 0) / 5), 100),
-        'verified_skills':  top_skills,
+        'uid':                f'demo-{github_username}',
+        'name':               github_data.get('name') or github_username,
+        'email':              f'{github_username}@demo.crediq.dev',
+        'role':               role,
+        'avatar':             github_data.get('avatar'),
+        'github_username':    github_username,
+        'bio':                github_data.get('bio') or '',
+        'location':           github_data.get('location') or '',
+        'trust_score':        trust.get('total'),
+        'builder_score':      builder.get('total'),
+        'github_score':       min(round(github_data.get('total_stars', 0) / 10 + github_data.get('followers', 0) / 5), 100),
+        'verified_skills':    top_skills,
         'public_repos':       github_data.get('public_repos', 0),
         'total_stars':        github_data.get('total_stars', 0),
         'total_forks':        github_data.get('total_forks', 0),
